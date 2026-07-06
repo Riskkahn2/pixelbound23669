@@ -30,6 +30,7 @@ const NAMES=['Bram','Wilhelm','Isolde','Greta','Corvin','Maura','Aldric','Sable'
 const BIOMES=[
  {name:'Gloomwood Forest',danger:'I',
   sky:['#0a0d10','#141d16'],far:'#101c14',mid:'#182619',ground:'#1e2b1f',gtop:'#2e4029',speck:'#141f15',
+  farStyle:'pines',seedId:0,
   props:['pine','bush','stump'],
   enemies:[
    {name:'Wolf',kind:'beast',hp:16,atk:4,def:0,spd:0.9,xp:12,gold:[2,6],c:{a:'#6d5a43',b:'#4a3c2c',eye:'#d84a3a'}},
@@ -39,6 +40,7 @@ const BIOMES=[
    c:{a:'#4a3b24',b:'#2c4a26',eye:'#ffd23f'}}},
  {name:'Cragfall Peaks',danger:'II',
   sky:['#0a0b10','#191a20'],far:'#14151c',mid:'#1f2027',ground:'#25262c',gtop:'#3a3b42',speck:'#191a1f',
+  farStyle:'peaks',seedId:1,
   props:['rock','boulder','bones'],
   enemies:[
    {name:'Goblin',kind:'hum',hp:19,atk:5,def:1,spd:0.9,xp:16,gold:[5,12],c:{cloth:'#4a4436',skin:'#6e8a4a',eye:'#ffd23f'},hat:null,weapon:'dagger'},
@@ -48,6 +50,7 @@ const BIOMES=[
    c:{a:'#5e6e3e',b:'#40492b',eye:'#d84a3a'}}},
  {name:'Palewind Tundra',danger:'III',
   sky:['#0a0d14','#1a2230'],far:'#161e2c',mid:'#232d3e',ground:'#2b3546',gtop:'#5a6a80',speck:'#20293a',
+  farStyle:'peaks',seedId:2,
   props:['pinesnow','icerock','bones'],
   enemies:[
    {name:'Frost Wolf',kind:'beast',hp:26,atk:7,def:1,spd:1.0,xp:22,gold:[8,15],c:{a:'#aebdc9',b:'#7d8c9a',eye:'#7fd2ff'}},
@@ -57,6 +60,7 @@ const BIOMES=[
    c:{a:'#d8e2ea',b:'#9aa8b5',eye:'#7fd2ff'}}},
  {name:'Sunscar Wastes',danger:'IV',
   sky:['#120c0a','#2c1c12'],far:'#241811',mid:'#332217',ground:'#3c2a1a',gtop:'#5e452a',speck:'#2c1f13',
+  farStyle:'dunes',seedId:3,
   props:['cactus','dune','bones'],
   enemies:[
    {name:'Scorpion',kind:'beast',hp:34,atk:9,def:2,spd:0.95,xp:30,gold:[12,22],c:{a:'#7a3c28',b:'#54281a',eye:'#ffd23f'}},
@@ -65,6 +69,18 @@ const BIOMES=[
   boss:{name:'Sand Colossus',kind:'big',hp:210,atk:18,def:4,spd:0.5,xp:180,gold:[80,130],size:1.45,boss:true,
    c:{a:'#c2a05e',b:'#8a6e3c',eye:'#ffd23f'}}},
 ];
+const NIGHTMARE={name:'The Nightmare',danger:'∞',endless:true,
+ sky:['#050002','#170007'],far:'#0d0004',mid:'#220009',ground:'#26000b',gtop:'#4a0016',speck:'#1a0006',
+ farStyle:'spikes',seedId:9,
+ props:['bones','stump','rock'],
+ enemies:[
+  {name:'Night Stalker',kind:'hum',hp:22,atk:9,def:2,spd:1.0,xp:40,gold:[10,18],c:{cloth:'#150a18',skin:'#4a2d55',eye:'#ff2a4a'},hat:'hood',weapon:'dagger'},
+  {name:'Abyss Hound',kind:'beast',hp:26,atk:10,def:1,spd:1.15,xp:42,gold:[10,20],c:{a:'#100812',b:'#1e0e22',eye:'#ff2a4a'}},
+  {name:'Wraith',kind:'hum',hp:20,atk:11,def:1,spd:0.9,xp:44,gold:[11,19],c:{cloth:'#241030',skin:'#8a7aa0',eye:'#7fd2ff'},hat:'cowl',weapon:'staff'},
+  {name:'Voidling',kind:'big',hp:46,atk:13,def:3,spd:0.55,xp:60,gold:[16,28],size:1.05,c:{a:'#170a1c',b:'#2a1330',eye:'#ff2a4a'}},
+ ],
+ boss:null};
+const NIGHTMARE_BASE_DIFF=4.2;
 const RARITY=[
  {pre:['Worn ','Plain ',''],mult:1,label:'Common',cls:'r0',col:'#b3a894'},
  {pre:['Fine ','Tempered ','Keen '],mult:1.6,label:'Rare',cls:'r1',col:'#5a8fd8'},
@@ -161,30 +177,64 @@ function spawnEnemy(tp,diff,x){
     atk:tp.atk*diff,def:tp.def+Math.floor(Math.max(0,diff-1)),
     cd:rnd(0.6,1.6),atkT:0,dead:false,bob:Math.random()*6};
 }
+function nightmareDiff(px){return NIGHTMARE_BASE_DIFF+px/2500}
+function nightmareTier(px){return BIOMES.length-1+px/3000}
+function extendNightmare(){
+  const m=mission;
+  m.diff=nightmareDiff(m.px);
+  m.tier=nightmareTier(m.px);
+  const aheadX=m.px+STAGE_W*2.5;
+  while(m.nextSpawnX<aheadX){
+    const gx=m.nextSpawnX;
+    const cnt=ri(2,5);
+    const es=[]; for(let j=0;j<cnt;j++)es.push(spawnEnemy(pick(m.B.enemies),m.diff,gx+j*28));
+    m.groups.push({x:gx,active:false,enemies:es});
+    m.nextSpawnX+=220+ri(-30,70);
+  }
+  while(m.nextChestX<aheadX){
+    m.chests.push({x:m.nextChestX,open:false});
+    m.nextChestX+=850+ri(-100,250);
+  }
+  while(m.nextPropX<aheadX){
+    const h1=hash(m.nextPropX*0.13+m.propSeed);
+    if(h1<0.75)m.props.push({x:m.nextPropX,t:h1<0.28?0:h1<0.55?1:2});
+    m.nextPropX+=90+Math.floor(hash(m.nextPropX+m.propSeed)*110);
+  }
+  const cutoff=m.px-500;
+  if(m.groups.length>40)m.groups=m.groups.filter(g=>g.x>cutoff);
+  if(m.chests.length>20)m.chests=m.chests.filter(c=>c.x>cutoff);
+  if(m.props.length>200)m.props=m.props.filter(p=>p.x>cutoff);
+}
 function startMission(bi){
   const eligible=state.heroes.filter(h=>!h.ko);
   if(!eligible.length)return;
-  const B=BIOMES[bi];
-  const diff=1+bi*0.65+Math.min(state.completions[bi],12)*0.06;
-  const len=3000+bi*400;
-  const groups=[]; const n=5+ri(0,2);
-  for(let i=0;i<n;i++){
-    const gx=560+((len-1100)/n)*i+ri(-50,50);
-    const cnt=ri(1,Math.min(4,2+Math.floor(bi/2)));
-    const es=[]; for(let j=0;j<cnt;j++)es.push(spawnEnemy(pick(B.enemies),diff,gx+j*28));
-    groups.push({x:gx,active:false,enemies:es});
-  }
-  const bx=len-240;
-  const bes=[spawnEnemy(B.boss,diff,bx)];
-  if(bi>=2)bes.push(spawnEnemy(pick(B.enemies),diff,bx+50));
-  groups.push({x:bx,active:false,enemies:bes,boss:true});
-  const chests=[0,1].map(()=>({x:800+ri(0,len-1700),open:false}));
+  const endless=bi==='nightmare';
+  const B=endless?NIGHTMARE:BIOMES[bi];
+  const diff=endless?NIGHTMARE_BASE_DIFF:1+bi*0.65+Math.min(state.completions[bi],12)*0.06;
+  const len=endless?Infinity:3000+bi*400;
   const party=eligible.map(h=>{const st=stats(h);
     return {h,st,hp:st.hp,cd:rnd(0.3,1.2),atkT:0,x:0,bob:Math.random()*6,healFx:0}});
   party.sort((a,b)=>CLASSES[a.h.cls].order-CLASSES[b.h.cls].order);
-  mission={bi,B,diff,len,groups,chests,party,px:150,cam:0,state:'walk',
-    loot:{gold:0,items:[]},fx:[],flo:[],t:0,winT:0,over:null,
-    props:genProps(len,bi*777)};
+  mission={bi,B,diff,tier:endless?BIOMES.length-1:bi,len,groups:[],chests:[],party,px:150,cam:0,state:'walk',
+    loot:{gold:0,items:[]},fx:[],flo:[],t:0,winT:0,over:null,endless,props:[],
+    nextSpawnX:560,nextChestX:900,nextPropX:200,propSeed:endless?B.seedId*777:bi*777};
+  if(endless){
+    extendNightmare();
+  }else{
+    const n=5+ri(0,2);
+    for(let i=0;i<n;i++){
+      const gx=560+((len-1100)/n)*i+ri(-50,50);
+      const cnt=ri(1,Math.min(4,2+Math.floor(bi/2)));
+      const es=[]; for(let j=0;j<cnt;j++)es.push(spawnEnemy(pick(B.enemies),diff,gx+j*28));
+      mission.groups.push({x:gx,active:false,enemies:es});
+    }
+    const bx=len-240;
+    const bes=[spawnEnemy(B.boss,diff,bx)];
+    if(bi>=2)bes.push(spawnEnemy(pick(B.enemies),diff,bx+50));
+    mission.groups.push({x:bx,active:false,enemies:bes,boss:true});
+    mission.chests=[0,1].map(()=>({x:800+ri(0,len-1700),open:false}));
+    mission.props=genProps(len,bi*777);
+  }
   gameMode='mission'; state.paused=false; updateUIVis();
 }
 function flo(txt,x,y,c){ if(mission)mission.flo.push({txt,x,y,c,t:1.3}); }
@@ -226,7 +276,7 @@ function awardGold(amount,x,y){
 }
 function maybeDropLoot(chance,x,y,xpEach){
   if(Math.random()>=chance)return;
-  const it=makeItem(mission.bi+1);
+  const it=makeItem(mission.tier+1);
   mission.loot.items.push(it);
   flo(it.name+'!',x,y,RARITY[it.rar].col);
   aliveParty().forEach(a=>giveXp(a.h,xpEach,a));
@@ -234,7 +284,7 @@ function maybeDropLoot(chance,x,y,xpEach){
 function killEnemy(e,by){
   e.dead=true;
   const tp=e.tp;
-  awardGold(Math.round(ri(tp.gold[0],tp.gold[1])*(1+mission.bi*0.4)),e.x,GROUND_Y-64);
+  awardGold(Math.round(ri(tp.gold[0],tp.gold[1])*(1+mission.tier*0.4)),e.x,GROUND_Y-64);
   const al=aliveParty();
   const each=Math.max(2,Math.round(tp.xp*mission.diff/Math.max(1,al.length)));
   al.forEach(a=>giveXp(a.h,each,a));
@@ -248,7 +298,7 @@ function hurtHero(r,rawAtk){
 }
 function openChest(c){
   c.open=true;
-  awardGold(ri(15,35)*(mission.bi+1),c.x,GROUND_Y-40);
+  awardGold(ri(15,35)*(mission.tier+1),c.x,GROUND_Y-40);
   maybeDropLoot(0.65,c.x,GROUND_Y-56,5);
 }
 function updateMission(dt){
@@ -261,6 +311,7 @@ function updateMission(dt){
   const al=aliveParty();
   if(!al.length){finishMission('wipe');return}
   al.forEach((r,i)=>{r.x=mission.px-i*34});
+  if(mission.endless)extendNightmare();
   for(const g of mission.groups)if(!g.active&&g.x-mission.px<340)g.active=true;
   const act=[];
   for(const g of mission.groups)if(g.active)for(const e of g.enemies)if(!e.dead)act.push(e);
@@ -272,12 +323,15 @@ function updateMission(dt){
     else if(e.x<slot)e.x=Math.min(slot,e.x+40*dt);
   });
   const engaged=act.length>0&&act[0].x-mission.px<74;
-  // win check: boss group cleared
-  const bg=mission.groups[mission.groups.length-1];
-  const bossDead=bg.enemies.every(e=>e.dead);
-  if(bossDead&&!act.length){
-    mission.winT+=dt;
-    if(mission.winT>1.1){finishMission('win');return}
+  // win check: boss group cleared (never applies to the endless Nightmare)
+  let bossDead=true;
+  if(!mission.endless){
+    const bg=mission.groups[mission.groups.length-1];
+    bossDead=bg.enemies.every(e=>e.dead);
+    if(bossDead&&!act.length){
+      mission.winT+=dt;
+      if(mission.winT>1.1){finishMission('win');return}
+    }
   }
   if(engaged){
     mission.state='fight';
@@ -314,9 +368,9 @@ function finishMission(res){
   if(mission.over)return;
   let g=mission.loot.gold, items=mission.loot.items.slice();
   if(res==='win'){
-    g+=60*(mission.bi+1);
-    items.push(makeItem(mission.bi+1));
-    mission.party.forEach(r=>{if(!r.h.ko)giveXp(r.h,30+mission.bi*12)});
+    g+=60*(mission.tier+1);
+    items.push(makeItem(mission.tier+1));
+    mission.party.forEach(r=>{if(!r.h.ko)giveXp(r.h,30+mission.tier*12)});
     state.completions[mission.bi]++;
     if(mission.bi+1===state.unlocked&&state.unlocked<BIOMES.length)state.unlocked++;
   }
@@ -468,18 +522,23 @@ function drawChest(c,sx){
   }
 }
 /* ---- backgrounds ---- */
-function farShape(bi,x,base){
+function farShape(B,x,base){
   // silhouette layer per biome
-  if(bi===0){ // pines
-    for(let i=0;i<4;i++)drawRect(x-10+i*3,base-36+i*10,23-i*6,10,BIOMES[0].far);
-  }else if(bi===1||bi===2){ // peaks
-    for(let i=0;i<6;i++)drawRect(x-30+i*5,base-60+i*10,62-i*10,10,BIOMES[bi].far);
-  }else{ // dunes
-    for(let i=0;i<3;i++)drawRect(x-40+i*10,base-16+i*6,84-i*20,6,BIOMES[3].far);
+  if(B.farStyle==='pines'){
+    for(let i=0;i<4;i++)drawRect(x-10+i*3,base-36+i*10,23-i*6,10,B.far);
+  }else if(B.farStyle==='peaks'){
+    for(let i=0;i<6;i++)drawRect(x-30+i*5,base-60+i*10,62-i*10,10,B.far);
+  }else if(B.farStyle==='dunes'){
+    for(let i=0;i<3;i++)drawRect(x-40+i*10,base-16+i*6,84-i*20,6,B.far);
+  }else if(B.farStyle==='spikes'){
+    for(let i=0;i<5;i++){
+      const hgt=26+Math.abs(i-2)*16;
+      drawRect(x-17+i*8,base-hgt+40,6,hgt,B.far);
+    }
   }
 }
-function drawProp(bi,type,sx,t){
-  const B=BIOMES[bi], name=B.props[type];
+function drawProp(B,type,sx,t){
+  const name=B.props[type];
   if(name==='pine'||name==='pinesnow'){
     drawRect(sx-2,GROUND_Y-14,5,14,'#3a2c1c');
     for(let i=0;i<4;i++)drawRect(sx-13+i*3,GROUND_Y-22-i*9,27-i*6,9,'#22381f');
@@ -493,8 +552,7 @@ function drawProp(bi,type,sx,t){
   else if(name==='dune'){drawRect(sx-16,GROUND_Y-8,33,8,'#54401f');}
   else if(name==='bones'){drawRect(sx-7,GROUND_Y-4,15,3,'#9a9186');drawRect(sx-2,GROUND_Y-8,4,5,'#9a9186');}
 }
-function drawBG(bi,cam,t){
-  const B=BIOMES[bi];
+function drawBG(B,cam,t){
   const g=ctx.createLinearGradient(0,0,0,GROUND_Y);
   g.addColorStop(0,B.sky[0]);g.addColorStop(1,B.sky[1]);
   ctx.fillStyle=g;ctx.fillRect(0,0,STAGE_W,GROUND_Y);
@@ -502,14 +560,14 @@ function drawBG(bi,cam,t){
   const sp1=140, off1=cam*0.25;
   for(let i=Math.floor(off1/sp1)-1;i<(off1+STAGE_W)/sp1+1;i++){
     const sx=i*sp1-off1;
-    if(hash(i*3.7+bi)<0.8)farShape(bi,sx,GROUND_Y-40-hash(i*9.1)*50);
+    if(hash(i*3.7+B.seedId)<0.8)farShape(B,sx,GROUND_Y-40-hash(i*9.1)*50);
   }
   // mid layer
   const sp2=220, off2=cam*0.55;
   ctx.globalAlpha=0.9;
   for(let i=Math.floor(off2/sp2)-1;i<(off2+STAGE_W)/sp2+1;i++){
     const sx=i*sp2-off2;
-    if(hash(i*5.3+bi*2)<0.7){
+    if(hash(i*5.3+B.seedId*2)<0.7){
       drawRect(sx-20,GROUND_Y-30,40,30,B.mid);
       drawRect(sx-12,GROUND_Y-44,24,14,B.mid);
     }
@@ -549,24 +607,27 @@ function drawPartyHUD(){
   });
   // progress
   drawRect(STAGE_W/2-120,10,240,6,'#0a080a');
-  drawRect(STAGE_W/2-120,10,240*clamp(mission.px/(mission.len-180),0,1),6,'#d8a24a');
+  if(mission.endless)drawRect(STAGE_W/2-120,10,240,6,'#8c2f2f');
+  else drawRect(STAGE_W/2-120,10,240*clamp(mission.px/(mission.len-180),0,1),6,'#d8a24a');
   ctx.fillStyle='#8a7d6b';
-  ctx.fillText(mission.B.name.toUpperCase(),STAGE_W/2-120,28);
-  // boss bar
-  const bg=mission.groups[mission.groups.length-1];
-  if(bg.active&&!bg.enemies[0].dead){
-    const b=bg.enemies[0];
-    drawRect(STAGE_W/2-150,STAGE_H-26,300,9,'#0a080a');
-    drawRect(STAGE_W/2-150,STAGE_H-26,300*b.hp/b.maxHp,9,'#8c2f2f');
-    ctx.fillStyle='#e06a5a';
-    ctx.fillText(b.tp.name.toUpperCase(),STAGE_W/2-150,STAGE_H-31);
+  ctx.fillText(mission.B.name.toUpperCase()+(mission.endless?'  ·  '+Math.floor(mission.px)+'m':''),STAGE_W/2-120,28);
+  // boss bar (regular biomes only — the Nightmare has no boss)
+  if(!mission.endless){
+    const bg=mission.groups[mission.groups.length-1];
+    if(bg.active&&!bg.enemies[0].dead){
+      const b=bg.enemies[0];
+      drawRect(STAGE_W/2-150,STAGE_H-26,300,9,'#0a080a');
+      drawRect(STAGE_W/2-150,STAGE_H-26,300*b.hp/b.maxHp,9,'#8c2f2f');
+      ctx.fillStyle='#e06a5a';
+      ctx.fillText(b.tp.name.toUpperCase(),STAGE_W/2-150,STAGE_H-31);
+    }
   }
   if(state.paused){ctx.fillStyle='#d8a24a';ctx.font='16px monospace';ctx.fillText('PAUSED',STAGE_W/2-28,STAGE_H/2);}
 }
 function drawMission(t){
   mission.cam=clamp(mission.px-STAGE_W*0.34,0,Math.max(0,mission.len-STAGE_W));
-  drawBG(mission.bi,mission.cam,t);
-  for(const p of mission.props){const sx=p.x-mission.cam;if(sx>-40&&sx<STAGE_W+40)drawProp(mission.bi,p.t,sx,t)}
+  drawBG(mission.B,mission.cam,t);
+  for(const p of mission.props){const sx=p.x-mission.cam;if(sx>-40&&sx<STAGE_W+40)drawProp(mission.B,p.t,sx,t)}
   for(const c of mission.chests){const sx=c.x-mission.cam;if(sx>-30&&sx<STAGE_W+30)drawChest(c,sx)}
   for(const g of mission.groups)for(const e of g.enemies){
     if(e.dead)continue;
@@ -778,6 +839,17 @@ function uiMap(){
     }
     return s+'</div>';
   });
+  const nmLocked=state.unlocked<BIOMES.length;
+  let nm='<div class="card"><h3>'+NIGHTMARE.name+' <span class="hurt">· Danger '+NIGHTMARE.danger+'</span></h3>';
+  if(nmLocked){
+    nm+='<p class="locknote">Locked — clear '+BIOMES[BIOMES.length-1].name+' first.</p>';
+  }else{
+    nm+='<div class="muted">Foes: '+NIGHTMARE.enemies.map(e=>e.name).join(', ')+'</div>'
+      +'<div class="hurt">Endless. Grows harder the longer you stay. Only retreat brings you home — but you keep everything you earned.</div>'
+      +'<div class="row">'+btn('Embark','Actions.embarkNightmare()',{disabled:!ready,warn:true})
+      +(ready?'':'<span class="locknote">need a standing hero</span>')+'</div>';
+  }
+  cards.push(nm+'</div>');
   return '<p class="muted" style="margin-bottom:8px">Choose an expedition. The party marches on its own — you may use potions or sound the retreat.</p>'
     +cardsGrid(cards)
     +'<div id="resetrow">'+btn('Abandon save & start anew','Actions.reset()',{warn:true})+'</div>';
@@ -853,6 +925,7 @@ const Actions={
     save();renderTab();
   },
   embark(bi){ if(bi<state.unlocked)startMission(bi); },
+  embarkNightmare(){ if(state.unlocked>=BIOMES.length)startMission('nightmare'); },
   potion(){
     if(!mission||mission.over||state.potions<=0)return;
     const tgt=aliveParty().sort((a,b)=>a.hp/a.st.hp-b.hp/b.st.hp)[0];
