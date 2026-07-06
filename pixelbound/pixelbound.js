@@ -8,6 +8,46 @@ let _uid=1;
 function uid(){return 'i'+(_uid++)+'x'+(Date.now()%100000)}
 function hash(n){const s=Math.sin(n*127.1)*43758.5453;return s-Math.floor(s)}
 
+/* ================= AUDIO ================= */
+let actx=null;
+function actxGet(){
+  if(!actx)actx=new (window.AudioContext||window.webkitAudioContext)();
+  if(actx.state==='suspended')actx.resume();
+  return actx;
+}
+function beep(freq,dur,type,vol,slideTo){
+  if(state&&state.muted)return;
+  const ac=actxGet(), t0=ac.currentTime;
+  const osc=ac.createOscillator(), gain=ac.createGain();
+  osc.type=type||'square';
+  osc.frequency.setValueAtTime(freq,t0);
+  if(slideTo)osc.frequency.exponentialRampToValueAtTime(Math.max(1,slideTo),t0+dur);
+  gain.gain.setValueAtTime(0,t0);
+  gain.gain.linearRampToValueAtTime(vol||0.15,t0+0.008);
+  gain.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+  osc.connect(gain); gain.connect(ac.destination);
+  osc.start(t0); osc.stop(t0+dur+0.02);
+}
+function beepSeq(notes,type,vol,dur){
+  notes.forEach((f,i)=>setTimeout(()=>beep(f,dur||0.09,type||'square',vol||0.14),i*80));
+}
+const sfx={
+  click(){beep(520,0.045,'square',0.10)},
+  tab(){beep(380,0.05,'square',0.08)},
+  hit(){beep(140,0.06,'square',0.14,90)},
+  crit(){beep(90,0.11,'square',0.18,50); setTimeout(()=>beep(200,0.08,'square',0.14),40)},
+  hurt(){beep(110,0.09,'sawtooth',0.14,60)},
+  down(){beep(220,0.28,'sawtooth',0.17,55)},
+  heal(){beep(520,0.08,'triangle',0.13,780)},
+  gold(){beep(900,0.05,'square',0.09,1300)},
+  chest(){beep(400,0.05,'square',0.1,700)},
+  item(){beepSeq([660,880],'triangle',0.12)},
+  levelup(){beepSeq([660,880,1046,1318],'square',0.14)},
+  win(){beepSeq([660,880,1046,1318,1568],'square',0.15,0.12)},
+  wipe(){beepSeq([300,240,180,120],'sawtooth',0.15,0.16)},
+  retreat(){beep(300,0.12,'square',0.12,180)},
+};
+
 /* ================= DATA ================= */
 const CLASSES={
   fighter:{label:'Fighter',hp:44,atk:6,def:3,spd:0.8,crit:5, color:'#b0413e',order:0,
@@ -114,7 +154,7 @@ function giveXp(h,amt,r){
   h.xp+=Math.round(amt);
   while(h.xp>=xpNeed(h.lvl)){
     h.xp-=xpNeed(h.lvl); h.lvl++; h.pts+=3;
-    if(mission&&r)flo('LEVEL UP!',r.x,GROUND_Y-58,'#ffd23f');
+    if(mission&&r){flo('LEVEL UP!',r.x,GROUND_Y-58,'#ffd23f');sfx.levelup();}
   }
 }
 function makeItem(tier,slot){
@@ -250,6 +290,7 @@ function heroAct(r,act){
       inj.hp=Math.min(inj.st.hp,inj.hp+amt);
       inj.healFx=0.5;
       flo('+'+amt,inj.x,GROUND_Y-52,'#7fd87f');
+      sfx.heal();
       giveXp(r.h,2,r); r.atkT=0.18; return;
     }
   }
@@ -266,6 +307,7 @@ function heroAct(r,act){
     d=Math.max(1,Math.round(d-e.def*0.5));
     e.hp-=d;
     flo(crit?d+'!':''+d,e.x,GROUND_Y-48,crit?'#ffd23f':'#f0e6d2');
+    crit?sfx.crit():sfx.hit();
     if(cls==='mage')mission.fx.push({x1:r.x+8,y1:GROUND_Y-26,x2:e.x,y2:GROUND_Y-20,t:0.16,c:'#7fb2ff'});
     if(e.hp<=0)killEnemy(e,r);
   }
@@ -273,12 +315,14 @@ function heroAct(r,act){
 function awardGold(amount,x,y){
   mission.loot.gold+=amount;
   flo('+'+amount+'g',x,y,'#d8a24a');
+  sfx.gold();
 }
 function maybeDropLoot(chance,x,y,xpEach){
   if(Math.random()>=chance)return;
   const it=makeItem(mission.tier+1);
   mission.loot.items.push(it);
   flo(it.name+'!',x,y,RARITY[it.rar].col);
+  sfx.item();
   aliveParty().forEach(a=>giveXp(a.h,xpEach,a));
 }
 function killEnemy(e,by){
@@ -294,10 +338,12 @@ function hurtHero(r,rawAtk){
   const d=Math.max(1,Math.round(rawAtk*rnd(0.85,1.15)-r.st.def*0.6));
   r.hp-=d;
   flo(''+d,r.x,GROUND_Y-52,'#e06a5a');
-  if(r.hp<=0){r.hp=0;r.h.ko=true;flo('DOWN!',r.x,GROUND_Y-66,'#8c2f2f');}
+  if(r.hp<=0){r.hp=0;r.h.ko=true;flo('DOWN!',r.x,GROUND_Y-66,'#8c2f2f');sfx.down();}
+  else sfx.hurt();
 }
 function openChest(c){
   c.open=true;
+  sfx.chest();
   awardGold(ri(15,35)*(mission.tier+1),c.x,GROUND_Y-40);
   maybeDropLoot(0.65,c.x,GROUND_Y-56,5);
 }
@@ -366,6 +412,7 @@ function updateMission(dt){
 }
 function finishMission(res){
   if(mission.over)return;
+  ({win:sfx.win,wipe:sfx.wipe,retreat:sfx.retreat})[res]();
   let g=mission.loot.gold, items=mission.loot.items.slice();
   if(res==='win'){
     g+=60*(mission.tier+1);
@@ -731,6 +778,7 @@ function btn(label,onclick,opts){
 }
 function updateRes(){
   byId('res').innerHTML='Gold <b>'+state.gold+'</b> &nbsp;·&nbsp; Potions <b>'+state.potions+'</b> &nbsp;·&nbsp; Heroes <b>'+state.heroes.length+'/6</b>';
+  byId('btnMute').textContent=state.muted?'Sound: Off':'Sound: On';
   if(gameMode==='mission'){
     byId('btnPotion').textContent='Potion ×'+state.potions;
     byId('btnPotion').disabled=state.potions<=0;
@@ -948,8 +996,14 @@ const Actions={
     if(!confirm('Abandon this save and start a new campaign?'))return;
     newGame(); save(); updateUIVis();
   },
+  toggleMute(){ state.muted=!state.muted; save(); updateRes(); },
 };
 window.Actions=Actions;
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button');
+  if(!b)return;
+  b.closest('#tabs')?sfx.tab():sfx.click();
+});
 
 /* ================= LOOP ================= */
 let last=performance.now();
@@ -969,6 +1023,7 @@ function loop(now){
   if(!ok)newGame();
   if(!state.recruits||!state.recruits.length)refreshOffers();
   if(state.speed==null)state.speed=1;
+  if(state.muted==null)state.muted=false;
   state.paused=false;
   gameMode='hub'; mission=null;
   updateUIVis();
