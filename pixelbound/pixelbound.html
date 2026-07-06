@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PIXELBOUND — an auto-crawler</title>
+<link rel="stylesheet" href="pixelbound.css">
+</head>
+<body>
+<div id="wrap">
+  <div id="top">
+    <h1>PIXEL<span>BOUND</span></h1>
+    <div id="res"></div>
+  </div>
+  <div id="stage">
+    <canvas id="cv" width="960" height="420"></canvas>
+    <div id="mctl" class="hidden">
+      <button class="act" id="btnPotion" onclick="Actions.potion()"></button>
+      <button class="act" id="btnSpeed" onclick="Actions.speed()"></button>
+      <button class="act" id="btnPause" onclick="Actions.pause()"></button>
+      <button class="act warn" onclick="Actions.retreat()">Retreat</button>
+    </div>
+    <div id="summary" class="hidden"><div id="sumbox"></div></div>
+  </div>
+  <div id="panel">
+    <div id="tabs">
+      <button data-t="party" onclick="Actions.tab('party')">Party</button>
+      <button data-t="recruit" onclick="Actions.tab('recruit')">Recruit</button>
+      <button data-t="shop" onclick="Actions.tab('shop')">Shop</button>
+      <button data-t="stash" onclick="Actions.tab('stash')">Stash</button>
+      <button data-t="map" onclick="Actions.tab('map')">Map</button>
+    </div>
+    <div id="content"></div>
+  </div>
+</div>
+<script src="pixelbound.js"></script>
+</body>
+</html>
