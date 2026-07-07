@@ -56,6 +56,32 @@ const sfx={
   resurrect(){beepSeq([260,390,520,780,1040],'triangle',0.16,0.14)},
 };
 
+/* ================= MUSIC ================= */
+let musicOn=false, musicGen=0;
+const TAVERN_CHORDS=[
+  {bass:130.81,notes:[261.63,329.63,392.00]}, // C
+  {bass:174.61,notes:[220.00,261.63,349.23]}, // F-ish
+  {bass:196.00,notes:[246.94,293.66,392.00]}, // G
+  {bass:130.81,notes:[261.63,329.63,392.00]}, // C
+];
+function playTavernBar(i,gen){
+  if(!musicOn||gen!==musicGen)return;
+  const chord=TAVERN_CHORDS[i%TAVERN_CHORDS.length];
+  beep(chord.bass,1.7,'triangle',0.06);
+  chord.notes.forEach((f,j)=>setTimeout(()=>{
+    if(musicOn&&gen===musicGen)beep(f,1.0,'triangle',0.035);
+  },260+j*360));
+  setTimeout(()=>playTavernBar(i+1,gen),2200);
+}
+function startMusic(){
+  if(musicOn)return;
+  musicOn=true; musicGen++;
+  playTavernBar(0,musicGen);
+}
+function stopMusic(){
+  musicOn=false; musicGen++;
+}
+
 /* ================= DATA ================= */
 const CLASSES={
   fighter:{label:'Fighter',hp:44,atk:6,def:3,spd:0.8,crit:5, color:'#b0413e',order:0,
@@ -78,6 +104,8 @@ const MAX_HEROES=7;
 const ALE_QUOTES=['Does nothing. Tastes great.','The bartender nods approvingly.',
   'Someone starts singing badly.','A hero in the corner cheers for no reason.',
   'The barkeep remembers your name now.','Nobody asked, but here it is anyway.'];
+const PROTEST_SIGNS=['FAIR XP NOW','UNIONIZE!','NO MORE CRITS','WE WANT NAPS',
+  '8HR DEATH SHIFTS','LOOT 4 ALL MOBS','STOP THE GRIND','RESPECT YOUR MOBS','M.W.U. LOCAL 13'];
 
 const BIOMES=[
  {name:'Gloomwood Forest',danger:'I',
@@ -868,6 +896,32 @@ function drawMission(t){
     ctx.globalAlpha=1;
   }
 }
+function drawProtest(t){
+  const total=state.completions.reduce((a,c)=>a+c,0);
+  const count=Math.min(8,Math.floor(total/2));
+  const wx=600,wy=108,ww=120,wh=82;
+  drawRect(wx-7,wy-7,ww+14,wh+14,'#241a10');
+  const wg=ctx.createLinearGradient(0,wy,0,wy+wh);
+  wg.addColorStop(0,'#1a2438');wg.addColorStop(1,'#2c1830');
+  ctx.fillStyle=wg;ctx.fillRect(wx,wy,ww,wh);
+  if(count<=0){
+    ctx.font='8px monospace';ctx.fillStyle='#4a4658';
+    ctx.fillText('quiet out there',wx+14,wy+wh/2+3);
+  }else{
+    for(let i=0;i<count;i++){
+      const col=i%4,row=Math.floor(i/4);
+      const mx=wx+18+col*24,my=wy+wh-14-row*32+Math.sin(t*3+i)*1.4;
+      drawRect(mx-3,my-8,6,8,'#141018');
+      drawRect(mx-2,my-11,4,4,'#241830');
+      drawRect(mx+3,my-17,2,9,'#0a0810');
+      drawRect(mx+1,my-21,9,6,'#8c2f2f');
+    }
+    ctx.font='6px monospace';ctx.fillStyle='#e8d8b0';
+    ctx.fillText(PROTEST_SIGNS[Math.floor(t/4)%PROTEST_SIGNS.length],wx+5,wy+12);
+  }
+  drawRect(wx,wy+wh/2-1,ww,2,'#241a10');
+  drawRect(wx+ww/2-1,wy,2,wh,'#241a10');
+}
 /* ---- hub ---- */
 function drawHub(t){
   // walls
@@ -875,10 +929,30 @@ function drawHub(t){
   g.addColorStop(0,'#171009');g.addColorStop(1,'#241a10');
   ctx.fillStyle=g;ctx.fillRect(0,0,STAGE_W,GROUND_Y);
   for(let y=40;y<GROUND_Y;y+=46)drawRect(0,y,STAGE_W,3,'rgba(0,0,0,0.3)');
+  // chandelier
+  drawRect(478,0,3,68,'#2c2115');
+  drawRect(453,68,54,6,'#3a2c1c');
+  for(let i=0;i<4;i++){
+    const cx=460+i*13;
+    drawRect(cx,62,3,8,'#cfc2ab');
+    drawRect(cx-1,58,5,4,'#ffd23f');
+    glow(cx+1,60,22,AMBER,'0.22');
+  }
+  // wall shield
+  drawRect(140,148,44,44,'#5c5c64');
+  drawRect(148,156,28,28,'#7a2f2f');
+  drawRect(158,148,8,44,'#3e3e46');
+  drawRect(140,166,44,8,'#3e3e46');
+  // monster protest window
+  drawProtest(t);
   // floor
   drawRect(0,GROUND_Y,STAGE_W,STAGE_H-GROUND_Y,'#1a1410');
   drawRect(0,GROUND_Y,STAGE_W,4,'#2c2115');
   for(let x=0;x<STAGE_W;x+=64)drawRect(x,GROUND_Y,2,STAGE_H-GROUND_Y,'rgba(0,0,0,0.35)');
+  // rug
+  drawRect(400,GROUND_Y+26,280,40,'#5a2a2a');
+  drawRect(410,GROUND_Y+31,260,30,'#6e3434');
+  for(let i=0;i<6;i++)drawRect(420+i*42,GROUND_Y+37,26,4,'#5a2a2a');
   // sign
   ctx.font='13px monospace';
   const signText='T H E   G I L D E D   F L A G O N';
@@ -897,6 +971,10 @@ function drawHub(t){
   // candles
   drawRect(120,GROUND_Y-72,3,6,'#cfc2ab');drawRect(119,GROUND_Y-76,5,4,'#ffd23f');glow(121,GROUND_Y-74,30,AMBER,'0.3');
   drawRect(220,GROUND_Y-72,3,6,'#cfc2ab');drawRect(219,GROUND_Y-76,5,4,'#ffd23f');glow(221,GROUND_Y-74,30,AMBER,'0.3');
+  // small side table with a mug
+  drawRect(178,GROUND_Y+14,40,4,'#4a3820');
+  drawRect(182,GROUND_Y+18,4,18,'#3a2c1c');drawRect(212,GROUND_Y+18,4,18,'#3a2c1c');
+  drawRect(190,GROUND_Y+6,8,9,'#d8a24a');drawRect(197,GROUND_Y+9,3,3,'#d8a24a');
   // fireplace (right)
   drawRect(760,GROUND_Y-110,150,110,'#3e3e46');
   drawRect(776,GROUND_Y-86,118,86,'#12090a');
@@ -907,6 +985,13 @@ function drawHub(t){
     drawRect(791+i*15,GROUND_Y-6-fh*0.6,5,fh*0.6,'#ffd23f');
   }
   glow(838,GROUND_Y-40,140,AMBER,'0.30');
+  // sleeping cat by the hearth
+  const catBob=Math.sin(t*1.5)*0.6;
+  drawRect(706,GROUND_Y+42+catBob,20,9,'#6e5240');
+  drawRect(700,GROUND_Y+38+catBob,10,8,'#6e5240');
+  drawRect(697,GROUND_Y+34+catBob,4,5,'#6e5240');
+  drawRect(709,GROUND_Y+34+catBob,4,5,'#6e5240');
+  drawRect(724,GROUND_Y+37+catBob,7,3,'#5a4030');
   // heroes idle
   const hx0=360;
   state.heroes.forEach((h,i)=>{
@@ -922,6 +1007,15 @@ function drawHub(t){
   if(!state.heroes.length){
     ctx.font='11px monospace';ctx.fillStyle='#8a7d6b';
     ctx.fillText('The tavern stands empty. Recruit a soul brave enough.',330,GROUND_Y-30);
+  }
+  // dust motes
+  for(let i=0;i<14;i++){
+    const drift=t*6*(i%2?1:-1);
+    const dx=(((hash(i*3.1)*STAGE_W+drift)%STAGE_W)+STAGE_W)%STAGE_W;
+    const dy=60+hash(i*7.7)*260+Math.sin(t*0.6+i)*10;
+    ctx.globalAlpha=0.12+0.08*Math.sin(t*2+i);
+    drawRect(dx,dy,2,2,'#d8a24a');
+    ctx.globalAlpha=1;
   }
   ctx.drawImage(vig,0,0);
 }
@@ -975,7 +1069,8 @@ function updateUIVis(){
   byId('panel').classList.toggle('hidden',gameMode==='mission');
   byId('mctl').classList.toggle('hidden',gameMode!=='mission');
   updateRes();
-  if(gameMode==='hub')renderTab();
+  if(gameMode==='hub'){ renderTab(); startMusic(); }
+  else stopMusic();
 }
 function renderTab(){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===currentTab));
