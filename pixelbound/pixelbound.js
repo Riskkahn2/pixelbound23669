@@ -313,6 +313,7 @@ function heroAct(r,act){
   }
 }
 function awardGold(amount,x,y){
+  amount=Math.round(amount);
   mission.loot.gold+=amount;
   flo('+'+amount+'g',x,y,'#d8a24a');
   sfx.gold();
@@ -415,7 +416,7 @@ function finishMission(res){
   ({win:sfx.win,wipe:sfx.wipe,retreat:sfx.retreat})[res]();
   let g=mission.loot.gold, items=mission.loot.items.slice();
   if(res==='win'){
-    g+=60*(mission.tier+1);
+    g+=Math.round(60*(mission.tier+1));
     items.push(makeItem(mission.tier+1));
     mission.party.forEach(r=>{if(!r.h.ko)giveXp(r.h,30+mission.tier*12)});
     state.completions[mission.bi]++;
@@ -713,10 +714,13 @@ function drawHub(t){
   drawRect(0,GROUND_Y,STAGE_W,4,'#2c2115');
   for(let x=0;x<STAGE_W;x+=64)drawRect(x,GROUND_Y,2,STAGE_H-GROUND_Y,'rgba(0,0,0,0.35)');
   // sign
-  drawRect(STAGE_W/2-110,26,220,34,'#3a2c1c');
-  drawRect(STAGE_W/2-106,30,212,26,'#241a10');
-  ctx.font='13px monospace';ctx.fillStyle='#d8a24a';
-  ctx.fillText('T H E   G I L D E D   F L A G O N',STAGE_W/2-98,48);
+  ctx.font='13px monospace';
+  const signText='T H E   G I L D E D   F L A G O N';
+  const signW=ctx.measureText(signText).width;
+  drawRect(STAGE_W/2-signW/2-17,26,signW+34,34,'#3a2c1c');
+  drawRect(STAGE_W/2-signW/2-13,30,signW+26,26,'#241a10');
+  ctx.fillStyle='#d8a24a';
+  ctx.fillText(signText,STAGE_W/2-signW/2,48);
   // bar counter (left)
   drawRect(50,GROUND_Y-52,220,12,'#54432c');
   drawRect(58,GROUND_Y-40,204,40,'#3a2c1c');
@@ -725,8 +729,8 @@ function drawHub(t){
   // bottles on counter
   for(let i=0;i<5;i++){drawRect(70+i*36,GROUND_Y-66,6,14,['#4e8f4a','#8c2f2f','#5a8fd8','#d8a24a','#7a5c94'][i]);}
   // candles
-  drawRect(120,GROUND_Y-72,3,6,'#cfc2ab');glow(121,GROUND_Y-74,30,AMBER,'0.3');
-  drawRect(220,GROUND_Y-72,3,6,'#cfc2ab');glow(221,GROUND_Y-74,30,AMBER,'0.3');
+  drawRect(120,GROUND_Y-72,3,6,'#cfc2ab');drawRect(119,GROUND_Y-76,5,4,'#ffd23f');glow(121,GROUND_Y-74,30,AMBER,'0.3');
+  drawRect(220,GROUND_Y-72,3,6,'#cfc2ab');drawRect(219,GROUND_Y-76,5,4,'#ffd23f');glow(221,GROUND_Y-74,30,AMBER,'0.3');
   // fireplace (right)
   drawRect(760,GROUND_Y-110,150,110,'#3e3e46');
   drawRect(776,GROUND_Y-86,118,86,'#12090a');
