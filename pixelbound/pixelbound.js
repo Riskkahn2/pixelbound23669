@@ -863,7 +863,7 @@ function heroCard(h,ctx2){
       const options=state.stash.filter(x=>x.slot===slot);
       if(options.length){
         s+='<select id="eq_'+h.id+'_'+slot+'">'
-          +options.map(x=>'<option value="'+x.id+'">'+esc(x.name)+' ('+RARITY[x.rar].label+')</option>').join('')
+          +options.map(x=>'<option value="'+x.id+'" style="color:'+RARITY[x.rar].col+'">'+esc(x.name)+' ('+RARITY[x.rar].label+')</option>').join('')
           +'</select>'+btn('Equip','Actions.equipSlot(\''+h.id+'\',\''+slot+'\')',{style:'padding:1px 5px'});
       }
       s+='</div>';
