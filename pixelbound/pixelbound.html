@@ -19,12 +19,16 @@
     <canvas id="cv" width="960" height="420"></canvas>
     <div id="trance"></div>
     <div id="mctl" class="hidden">
-      <button class="act" id="btnPotion" onclick="Actions.potion()"></button>
-      <button class="act" id="btnSuper" onclick="Actions.superPotion()"></button>
-      <button class="act" id="btnPower" onclick="Actions.powerPotion()"></button>
-      <button class="act" id="btnSpeed" onclick="Actions.speed()"></button>
-      <button class="act" id="btnPause" onclick="Actions.pause()"></button>
-      <button class="act warn" onclick="Actions.retreat()">Retreat</button>
+      <div id="mctlTop">
+        <button class="act" id="btnSpeed" onclick="Actions.speed()"></button>
+        <button class="act" id="btnPause" onclick="Actions.pause()"></button>
+        <button class="act warn" onclick="Actions.retreat()">Retreat</button>
+      </div>
+      <div id="mctlPotions">
+        <button class="act" id="btnPotion" onclick="Actions.potion()"></button>
+        <button class="act" id="btnSuper" onclick="Actions.superPotion()"></button>
+        <button class="act" id="btnPower" onclick="Actions.powerPotion()"></button>
+      </div>
     </div>
     <div id="summary" class="hidden"><div id="sumbox"></div></div>
   </div>

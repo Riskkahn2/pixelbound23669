@@ -646,6 +646,11 @@ function drawHeroSprite(r,sx,t,walking){
   drawHumanoid(sx,GROUND_Y,1,c.pal,{
     hat:c.hat,weapon:c.weapon,armor:r.h.cls==='fighter',
     phase:walking?(t*8+r.bob):null,atkT:r.atkT,ko:r.h.ko,healFx:r.healFx});
+  if(!r.h.ko&&r.hp<r.st.hp){
+    const w=22,hx=sx-w/2,hy=GROUND_Y-45,pct=clamp(r.hp/r.st.hp,0,1);
+    drawRect(hx,hy,w,3,'#0a080a');
+    drawRect(hx,hy,Math.max(1,w*pct),3,pct>0.5?'#4e8f4a':pct>0.25?'#d8a24a':'#a23a30');
+  }
 }
 function drawChest(c,sx){
   if(c.open){
