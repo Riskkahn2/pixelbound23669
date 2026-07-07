@@ -243,7 +243,7 @@ function nightmareDiff(px){return NIGHTMARE_BASE_DIFF+px/2500}
 function nightmareTier(px){return BIOMES.length-1+px/3000}
 function extendNightmare(){
   const m=mission;
-  m.diff=nightmareDiff(m.px)*(m.trance?1.4:1);
+  m.diff=nightmareDiff(m.px)*(m.trance?1.5:1);
   m.tier=nightmareTier(m.px);
   const aheadX=m.px+STAGE_W*2.5;
   while(m.nextSpawnX<aheadX){
@@ -272,14 +272,23 @@ function extendNightmare(){
   if(m.shards.length>10)m.shards=m.shards.filter(s=>s.x>cutoff);
   if(m.props.length>200)m.props=m.props.filter(p=>p.x>cutoff);
 }
+function tranceParticles(){
+  const arr=[];
+  for(let i=0;i<80;i++){
+    arr.push({x:Math.random()*STAGE_W,y:Math.random()*STAGE_H,
+      vx:rnd(-60,60),vy:rnd(140,300),len:ri(8,20),hue:ri(0,360)});
+  }
+  return arr;
+}
 function triggerTrance(shard){
   shard.taken=true;
-  mission.trance={t:0,dur:7};
+  mission.trance={t:0,dur:7,particles:tranceParticles()};
   flo('NIGHTMARE TRANCE',shard.x,GROUND_Y-90,'#ff2a4a');
   sfx.trance();
   byId('stage').classList.add('trance');
 }
-function lootMult(){return mission.trance?1.75:1}
+function lootMult(){return mission.trance?2.5:1}
+function dmgMult(){return mission.trance?1.5:1}
 function startMission(bi){
   const eligible=state.heroes.filter(h=>!h.ko);
   if(!eligible.length)return;
@@ -336,7 +345,7 @@ function heroAct(r,act){
   else targets=[act[0]];
   r.atkT=0.18;
   for(const e of targets){
-    let d=r.st.atk*(cls==='mage'&&targets.length>1?0.75:1)*rnd(0.85,1.15);
+    let d=r.st.atk*(cls==='mage'&&targets.length>1?0.75:1)*rnd(0.85,1.15)*dmgMult();
     const crit=Math.random()*100<r.st.crit;
     if(crit)d*=2;
     d=Math.max(1,Math.round(d-e.def*0.5));
@@ -354,7 +363,7 @@ function awardGold(amount,x,y){
   sfx.gold();
 }
 function maybeDropLoot(chance,x,y,xpEach){
-  if(Math.random()>=chance*(mission.trance?1.4:1))return;
+  if(Math.random()>=chance*(mission.trance?2:1))return;
   const it=makeItem(mission.tier+1);
   mission.loot.items.push(it);
   flo(it.name+'!',x,y,RARITY[it.rar].col);
@@ -391,6 +400,14 @@ function updateMission(dt){
   mission.party.forEach(r=>{r.atkT=Math.max(0,r.atkT-dt);r.healFx=Math.max(0,(r.healFx||0)-dt)});
   if(mission.trance){
     mission.trance.t+=dt;
+    for(const p of mission.trance.particles){
+      p.vx+=rnd(-140,140)*dt; p.vx=clamp(p.vx,-140,140);
+      p.x+=p.vx*dt; p.y+=p.vy*dt;
+      p.hue=(p.hue+dt*260)%360;
+      if(p.y>STAGE_H+20||p.x<-20||p.x>STAGE_W+20){
+        p.x=Math.random()*STAGE_W; p.y=-10; p.vx=rnd(-60,60); p.vy=rnd(140,300);
+      }
+    }
     if(mission.trance.t>=mission.trance.dur){
       mission.trance=null;
       byId('stage').classList.remove('trance');
@@ -435,7 +452,7 @@ function updateMission(dt){
         e.cd-=dt;
         if(e.cd<=0){
           const tgt=(e.tp.kind==='hum'&&Math.random()<0.3)?pick(aliveParty()):aliveParty()[0];
-          if(tgt)hurtHero(tgt,e.atk);
+          if(tgt)hurtHero(tgt,e.atk*dmgMult());
           e.cd=1/e.tp.spd; e.atkT=0.2;
           if(!aliveParty().length){finishMission('wipe');return}
         }
@@ -754,6 +771,16 @@ function drawMission(t){
     ctx.globalAlpha=1;
   }
   ctx.drawImage(vig,0,0);
+  if(mission.trance){
+    ctx.lineWidth=2;
+    for(const p of mission.trance.particles){
+      ctx.strokeStyle='hsl('+Math.round(p.hue)+',100%,60%)';
+      ctx.beginPath();
+      ctx.moveTo(p.x,p.y);
+      ctx.lineTo(p.x-p.vx*0.05,p.y-p.len);
+      ctx.stroke();
+    }
+  }
   drawPartyHUD();
   if(mission.trance){
     ctx.font='14px monospace';

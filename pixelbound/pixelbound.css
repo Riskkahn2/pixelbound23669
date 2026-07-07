@@ -18,13 +18,14 @@
   canvas{width:100%;height:auto;image-rendering:pixelated;display:block}
   .hidden{display:none !important}
   /* nightmare trance */
-  #trance{position:absolute;inset:0;pointer-events:none;opacity:0;
-    background:conic-gradient(from 0deg,#ff003c,#ff8f00,#ffee00,#00ff6a,#00d0ff,#7000ff,#ff00c8,#ff003c);
-    mix-blend-mode:hard-light;transition:opacity .8s ease}
-  #stage.trance #trance{opacity:.5;animation:trance-spin 2.4s linear infinite}
-  #stage.trance canvas{animation:trance-hue 1.8s linear infinite}
-  @keyframes trance-spin{from{transform:rotate(0deg) scale(1.8)}to{transform:rotate(360deg) scale(1.8)}}
-  @keyframes trance-hue{from{filter:hue-rotate(0deg) saturate(1.6) contrast(1.15)}to{filter:hue-rotate(360deg) saturate(1.6) contrast(1.15)}}
+  #trance{position:absolute;inset:0;pointer-events:none;opacity:0;background:#fff}
+  #stage.trance #trance{animation:trance-flash .22s steps(1,end) infinite}
+  #stage.trance canvas{animation:trance-invert .9s linear infinite}
+  @keyframes trance-flash{0%,100%{opacity:0}50%{opacity:.6}}
+  @keyframes trance-invert{
+    0%{filter:invert(1) hue-rotate(0deg) saturate(2.4) contrast(1.35)}
+    100%{filter:invert(1) hue-rotate(360deg) saturate(2.4) contrast(1.35)}
+  }
   /* mission controls */
   #mctl{position:absolute;top:8px;right:8px;display:flex;gap:6px;line-height:normal}
   #mctl button{font-size:11px}
