@@ -46,6 +46,11 @@ const sfx={
   win(){beepSeq([660,880,1046,1318,1568],'square',0.15,0.12)},
   wipe(){beepSeq([300,240,180,120],'sawtooth',0.15,0.16)},
   retreat(){beep(300,0.12,'square',0.12,180)},
+  trance(){
+    beep(70,1.1,'sawtooth',0.16,18);
+    setTimeout(()=>beep(90,0.8,'sawtooth',0.13,140),150);
+    setTimeout(()=>beep(50,0.9,'sawtooth',0.14,10),300);
+  },
 };
 
 /* ================= DATA ================= */
@@ -238,7 +243,7 @@ function nightmareDiff(px){return NIGHTMARE_BASE_DIFF+px/2500}
 function nightmareTier(px){return BIOMES.length-1+px/3000}
 function extendNightmare(){
   const m=mission;
-  m.diff=nightmareDiff(m.px);
+  m.diff=nightmareDiff(m.px)*(m.trance?1.4:1);
   m.tier=nightmareTier(m.px);
   const aheadX=m.px+STAGE_W*2.5;
   while(m.nextSpawnX<aheadX){
@@ -252,6 +257,10 @@ function extendNightmare(){
     m.chests.push({x:m.nextChestX,open:false});
     m.nextChestX+=850+ri(-100,250);
   }
+  while(m.nextShardX<aheadX){
+    m.shards.push({x:m.nextShardX,taken:false});
+    m.nextShardX+=2200+ri(-400,900);
+  }
   while(m.nextPropX<aheadX){
     const h1=hash(m.nextPropX*0.13+m.propSeed);
     if(h1<0.75)m.props.push({x:m.nextPropX,t:h1<0.28?0:h1<0.55?1:2});
@@ -260,8 +269,17 @@ function extendNightmare(){
   const cutoff=m.px-500;
   if(m.groups.length>40)m.groups=m.groups.filter(g=>g.x>cutoff);
   if(m.chests.length>20)m.chests=m.chests.filter(c=>c.x>cutoff);
+  if(m.shards.length>10)m.shards=m.shards.filter(s=>s.x>cutoff);
   if(m.props.length>200)m.props=m.props.filter(p=>p.x>cutoff);
 }
+function triggerTrance(shard){
+  shard.taken=true;
+  mission.trance={t:0,dur:7};
+  flo('NIGHTMARE TRANCE',shard.x,GROUND_Y-90,'#ff2a4a');
+  sfx.trance();
+  byId('stage').classList.add('trance');
+}
+function lootMult(){return mission.trance?1.75:1}
 function startMission(bi){
   const eligible=state.heroes.filter(h=>!h.ko);
   if(!eligible.length)return;
@@ -272,9 +290,9 @@ function startMission(bi){
   const party=eligible.map(h=>{const st=stats(h);
     return {h,st,hp:st.hp,cd:rnd(0.3,1.2),atkT:0,x:0,bob:Math.random()*6,healFx:0}});
   party.sort((a,b)=>CLASSES[a.h.cls].order-CLASSES[b.h.cls].order);
-  mission={bi,B,diff,tier:endless?BIOMES.length-1:bi,len,groups:[],chests:[],party,px:150,cam:0,state:'walk',
-    loot:{gold:0,items:[]},fx:[],flo:[],t:0,winT:0,over:null,endless,props:[],
-    nextSpawnX:560,nextChestX:900,nextPropX:200,propSeed:endless?B.seedId*777:bi*777};
+  mission={bi,B,diff,tier:endless?BIOMES.length-1:bi,len,groups:[],chests:[],shards:[],party,px:150,cam:0,state:'walk',
+    loot:{gold:0,items:[]},fx:[],flo:[],t:0,winT:0,over:null,endless,props:[],trance:null,
+    nextSpawnX:560,nextChestX:900,nextShardX:1800,nextPropX:200,propSeed:endless?B.seedId*777:bi*777};
   if(endless){
     extendNightmare();
   }else{
@@ -330,25 +348,25 @@ function heroAct(r,act){
   }
 }
 function awardGold(amount,x,y){
-  amount=Math.round(amount);
+  amount=Math.round(amount*lootMult());
   mission.loot.gold+=amount;
   flo('+'+amount+'g',x,y,'#d8a24a');
   sfx.gold();
 }
 function maybeDropLoot(chance,x,y,xpEach){
-  if(Math.random()>=chance)return;
+  if(Math.random()>=chance*(mission.trance?1.4:1))return;
   const it=makeItem(mission.tier+1);
   mission.loot.items.push(it);
   flo(it.name+'!',x,y,RARITY[it.rar].col);
   sfx.item();
-  aliveParty().forEach(a=>giveXp(a.h,xpEach,a));
+  aliveParty().forEach(a=>giveXp(a.h,Math.round(xpEach*lootMult()),a));
 }
 function killEnemy(e,by){
   e.dead=true;
   const tp=e.tp;
   awardGold(Math.round(ri(tp.gold[0],tp.gold[1])*(1+mission.tier*0.4)),e.x,GROUND_Y-64);
   const al=aliveParty();
-  const each=Math.max(2,Math.round(tp.xp*mission.diff/Math.max(1,al.length)));
+  const each=Math.max(2,Math.round(tp.xp*mission.diff/Math.max(1,al.length)*lootMult()));
   al.forEach(a=>giveXp(a.h,each,a));
   maybeDropLoot(tp.boss?1:0.16,e.x,GROUND_Y-80,4);
 }
@@ -371,11 +389,19 @@ function updateMission(dt){
   mission.flo=mission.flo.filter(f=>f.t>0);
   mission.fx.forEach(f=>f.t-=dt); mission.fx=mission.fx.filter(f=>f.t>0);
   mission.party.forEach(r=>{r.atkT=Math.max(0,r.atkT-dt);r.healFx=Math.max(0,(r.healFx||0)-dt)});
+  if(mission.trance){
+    mission.trance.t+=dt;
+    if(mission.trance.t>=mission.trance.dur){
+      mission.trance=null;
+      byId('stage').classList.remove('trance');
+    }
+  }
   if(mission.over)return;
   const al=aliveParty();
   if(!al.length){finishMission('wipe');return}
   al.forEach((r,i)=>{r.x=mission.px-i*34});
   if(mission.endless)extendNightmare();
+  if(mission.shards)for(const s of mission.shards)if(!s.taken&&mission.px>s.x-16)triggerTrance(s);
   for(const g of mission.groups)if(!g.active&&g.x-mission.px<340)g.active=true;
   const act=[];
   for(const g of mission.groups)if(g.active)for(const e of g.enemies)if(!e.dead)act.push(e);
@@ -430,6 +456,8 @@ function updateMission(dt){
 }
 function finishMission(res){
   if(mission.over)return;
+  mission.trance=null;
+  byId('stage').classList.remove('trance');
   ({win:sfx.win,wipe:sfx.wipe,retreat:sfx.retreat})[res]();
   let g=mission.loot.gold, items=mission.loot.items.slice();
   if(res==='win'){
@@ -586,6 +614,14 @@ function drawChest(c,sx){
     drawRect(sx-2,GROUND_Y-11,4,4,'#d8a24a');
   }
 }
+function drawShard(sx,t){
+  const gy=GROUND_Y-30+Math.sin(t*3)*4;
+  const spin=Math.sin(t*6);
+  drawRect(sx-1,gy-16,2,32,'#3a0a18');
+  drawRect(sx-1-Math.abs(spin*5),gy-4,2+Math.abs(spin*10),8,'#7a1030');
+  drawRect(sx-2,gy-3,4,4,'#ff2a4a');
+  glow(sx,gy,30+spin*6,'rgba(255,42,74,A)',''+(0.3+Math.abs(spin)*0.15));
+}
 /* ---- backgrounds ---- */
 function farShape(B,x,base){
   // silhouette layer per biome
@@ -694,6 +730,7 @@ function drawMission(t){
   drawBG(mission.B,mission.cam,t);
   for(const p of mission.props){const sx=p.x-mission.cam;if(sx>-40&&sx<STAGE_W+40)drawProp(mission.B,p.t,sx,t)}
   for(const c of mission.chests){const sx=c.x-mission.cam;if(sx>-30&&sx<STAGE_W+30)drawChest(c,sx)}
+  if(mission.shards)for(const s of mission.shards){if(s.taken)continue;const sx=s.x-mission.cam;if(sx>-30&&sx<STAGE_W+30)drawShard(sx,t)}
   for(const g of mission.groups)for(const e of g.enemies){
     if(e.dead)continue;
     const sx=e.x-mission.cam;
@@ -718,6 +755,13 @@ function drawMission(t){
   }
   ctx.drawImage(vig,0,0);
   drawPartyHUD();
+  if(mission.trance){
+    ctx.font='14px monospace';
+    ctx.fillStyle='#ff2a4a';
+    ctx.globalAlpha=0.55+Math.sin(t*10)*0.35;
+    ctx.fillText('N I G H T M A R E   T R A N C E',STAGE_W/2-150,64);
+    ctx.globalAlpha=1;
+  }
 }
 /* ---- hub ---- */
 function drawHub(t){
