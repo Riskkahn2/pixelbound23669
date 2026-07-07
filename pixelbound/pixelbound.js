@@ -53,6 +53,7 @@ const sfx={
   },
   cheer(){beepSeq([440,550,660,880],'triangle',0.12,0.08)},
   power(){beepSeq([220,330,440],'square',0.15,0.1); setTimeout(()=>beep(660,0.15,'square',0.16),140)},
+  resurrect(){beepSeq([260,390,520,780,1040],'triangle',0.16,0.14)},
 };
 
 /* ================= DATA ================= */
@@ -73,6 +74,7 @@ const CLASSES={
 const NAMES=['Bram','Wilhelm','Isolde','Greta','Corvin','Maura','Aldric','Sable','Odo','Ren',
   'Petra','Lazlo','Vesna','Roderic','Ines','Talbot','Yara','Osric','Nell','Dagny',
   'Erlan','Sigrid','Fenwick','Ludo','Marda','Quill','Havel','Tamsin','Ulric','Zora'];
+const MAX_HEROES=7;
 const ALE_QUOTES=['Does nothing. Tastes great.','The bartender nods approvingly.',
   'Someone starts singing badly.','A hero in the corner cheers for no reason.',
   'The barkeep remembers your name now.','Nobody asked, but here it is anyway.'];
@@ -131,6 +133,22 @@ const NIGHTMARE={name:'The Nightmare',danger:'∞',endless:true,
  ],
  boss:null};
 const NIGHTMARE_BASE_DIFF=4.2;
+const MIRROR={name:'The Mirror',danger:'§',mirror:true,
+ sky:['#04060a','#0e1420'],far:'#0a0f18',mid:'#141c2a',ground:'#182233',gtop:'#3a4a66',speck:'#101722',
+ farStyle:'peaks',seedId:11,
+ props:['icerock','rock','bones'],
+ enemies:[
+  {name:'Broken Reflection',kind:'hum',hp:30,atk:11,def:2,spd:1.05,xp:55,gold:[15,26],c:{cloth:'#28344a',skin:'#c9d6e8',eye:'#8fe0ff'},hat:'hood',weapon:'dagger'},
+  {name:'Warped Echo',kind:'beast',hp:34,atk:12,def:1,spd:1.2,xp:58,gold:[15,28],c:{a:'#1c2436',b:'#2e3c56',eye:'#8fe0ff'}},
+  {name:'Twisted Shade',kind:'hum',hp:28,atk:13,def:1,spd:0.9,xp:60,gold:[16,29],c:{cloth:'#3a2848',skin:'#c9d6e8',eye:'#ff8fd8'},hat:'cowl',weapon:'staff'},
+ ],
+ boss:{name:'Your Reflection',kind:'hum',hp:260,atk:20,def:5,spd:0.65,xp:260,gold:[120,190],boss:true,
+  c:{cloth:'#4a5a80',skin:'#e8eef8',eye:'#ffffff'},hat:'helm',weapon:'sword'}};
+const MIRROR_DIFF=7.5;
+const MIRROR_TIER=5;
+function mirrorUnlocked(){
+  return state.completions.every(c=>c>=5)&&(state.nightmareBestDistance||0)>=50000;
+}
 const RARITY=[
  {pre:['Worn ','Plain ',''],mult:1,label:'Common',cls:'r0',col:'#b3a894'},
  {pre:['Fine ','Tempered ','Keen '],mult:1.6,label:'Rare',cls:'r1',col:'#5a8fd8'},
@@ -210,9 +228,9 @@ function refreshOffers(){
   state.shop=[0,1,2].map(()=>makeItem(state.unlocked));
 }
 function newGame(){
-  state={gold:150,potions:2,superPotions:0,powerPotions:0,recruiterFavors:0,alesBought:0,
+  state={gold:150,potions:2,superPotions:0,powerPotions:0,resPotions:0,recruiterFavors:0,alesBought:0,
     heroes:[newHero('fighter'),newHero('healer')],
-    stash:[makeItem(1,'weapon')],unlocked:1,completions:[0,0,0,0],
+    stash:[makeItem(1,'weapon')],unlocked:1,completions:[0,0,0,0],nightmareBestDistance:0,
     recruits:[],shop:[],speed:1,paused:false};
   refreshOffers();
 }
@@ -308,31 +326,34 @@ function startMission(bi){
   const eligible=state.heroes.filter(h=>!h.ko);
   if(!eligible.length)return;
   const endless=bi==='nightmare';
-  const B=endless?NIGHTMARE:BIOMES[bi];
-  const diff=endless?NIGHTMARE_BASE_DIFF:1+bi*0.65+Math.min(state.completions[bi],12)*0.06;
-  const len=endless?Infinity:3000+bi*400;
+  const mirror=bi==='mirror';
+  const B=endless?NIGHTMARE:mirror?MIRROR:BIOMES[bi];
+  const tierNum=endless?BIOMES.length-1:mirror?MIRROR_TIER:bi;
+  const diff=endless?NIGHTMARE_BASE_DIFF:mirror?MIRROR_DIFF:1+bi*0.65+Math.min(state.completions[bi],12)*0.06;
+  const len=endless?Infinity:mirror?4200:3000+bi*400;
+  const seed=endless||mirror?B.seedId*777:bi*777;
   const party=eligible.map(h=>{const st=stats(h);
     return {h,st,hp:st.hp,cd:rnd(0.3,1.2),atkT:0,x:0,bob:Math.random()*6,healFx:0}});
   party.sort((a,b)=>CLASSES[a.h.cls].order-CLASSES[b.h.cls].order);
-  mission={bi,B,diff,tier:endless?BIOMES.length-1:bi,len,groups:[],chests:[],shards:[],party,px:150,cam:0,state:'walk',
-    loot:{gold:0,items:[]},fx:[],flo:[],t:0,winT:0,over:null,endless,props:[],trance:null,buff:null,
-    nextSpawnX:560,nextChestX:900,nextShardX:1800,nextPropX:200,propSeed:endless?B.seedId*777:bi*777};
+  mission={bi,B,diff,tier:tierNum,len,groups:[],chests:[],shards:[],party,px:150,cam:0,state:'walk',
+    loot:{gold:0,items:[]},fx:[],flo:[],t:0,winT:0,over:null,endless,mirror,props:[],trance:null,buff:null,
+    nextSpawnX:560,nextChestX:900,nextShardX:1800,nextPropX:200,propSeed:seed};
   if(endless){
     extendNightmare();
   }else{
     const n=5+ri(0,2);
     for(let i=0;i<n;i++){
       const gx=560+((len-1100)/n)*i+ri(-50,50);
-      const cnt=ri(1,Math.min(4,2+Math.floor(bi/2)));
+      const cnt=ri(1,Math.min(4,2+Math.floor(tierNum/2)));
       const es=[]; for(let j=0;j<cnt;j++)es.push(spawnEnemy(pick(B.enemies),diff,gx+j*28));
       mission.groups.push({x:gx,active:false,enemies:es});
     }
     const bx=len-240;
     const bes=[spawnEnemy(B.boss,diff,bx)];
-    if(bi>=2)bes.push(spawnEnemy(pick(B.enemies),diff,bx+50));
+    if(tierNum>=2)bes.push(spawnEnemy(pick(B.enemies),diff,bx+50));
     mission.groups.push({x:bx,active:false,enemies:bes,boss:true});
     mission.chests=[0,1].map(()=>({x:800+ri(0,len-1700),open:false}));
-    mission.props=genProps(len,bi*777);
+    mission.props=genProps(len,seed);
   }
   gameMode='mission'; state.paused=false; updateUIVis();
 }
@@ -406,7 +427,7 @@ function hurtHero(r,rawAtk){
   const d=Math.max(1,Math.round(rawAtk*rnd(0.85,1.15)-r.st.def*0.6));
   r.hp-=d;
   flo(''+d,r.x,GROUND_Y-52,'#e06a5a');
-  if(r.hp<=0){r.hp=0;r.h.ko=true;flo('DOWN!',r.x,GROUND_Y-66,'#8c2f2f');sfx.down();}
+  if(r.hp<=0){r.hp=0;r.h.ko=true;flo('DOWN!',r.x,GROUND_Y-66,'#8c2f2f');sfx.down();updateRes();}
   else sfx.hurt();
 }
 function openChest(c){
@@ -502,14 +523,17 @@ function finishMission(res){
   if(mission.over)return;
   mission.trance=null;
   byId('stage').classList.remove('trance');
+  if(mission.endless)state.nightmareBestDistance=Math.max(state.nightmareBestDistance||0,mission.px);
   ({win:sfx.win,wipe:sfx.wipe,retreat:sfx.retreat})[res]();
   let g=mission.loot.gold, items=mission.loot.items.slice();
   if(res==='win'){
     g+=Math.round(60*(mission.tier+1));
     items.push(makeItem(mission.tier+1));
     mission.party.forEach(r=>{if(!r.h.ko)giveXp(r.h,30+mission.tier*12)});
-    state.completions[mission.bi]++;
-    if(mission.bi+1===state.unlocked&&state.unlocked<BIOMES.length)state.unlocked++;
+    if(!mission.endless&&!mission.mirror){
+      state.completions[mission.bi]++;
+      if(mission.bi+1===state.unlocked&&state.unlocked<BIOMES.length)state.unlocked++;
+    }
   }
   if(res==='wipe'){
     g=Math.round(g*0.5);
@@ -776,6 +800,9 @@ function drawPartyHUD(){
 }
 function drawMission(t){
   mission.cam=clamp(mission.px-STAGE_W*0.34,0,Math.max(0,mission.len-STAGE_W));
+  const mir=mission.mirror;
+  ctx.save();
+  if(mir){ ctx.translate(STAGE_W,0); ctx.scale(-1,1); }
   drawBG(mission.B,mission.cam,t);
   for(const p of mission.props){const sx=p.x-mission.cam;if(sx>-40&&sx<STAGE_W+40)drawProp(mission.B,p.t,sx,t)}
   for(const c of mission.chests){const sx=c.x-mission.cam;if(sx>-30&&sx<STAGE_W+30)drawChest(c,sx)}
@@ -795,11 +822,30 @@ function drawMission(t){
     ctx.beginPath();ctx.moveTo(f.x1-mission.cam,f.y1);ctx.lineTo(f.x2-mission.cam,f.y2);ctx.stroke();
     ctx.globalAlpha=1;
   }
+  if(mir){
+    // ceiling reflection — the mirror world hangs its own fight upside-down overhead
+    ctx.save();
+    ctx.globalAlpha=0.4;
+    ctx.translate(0,44+GROUND_Y);
+    ctx.scale(1,-1);
+    for(const g of mission.groups)for(const e of g.enemies){
+      if(e.dead)continue;
+      const sx=e.x-mission.cam;
+      if(sx>-60&&sx<STAGE_W+60)drawEnemy(e,sx,t);
+    }
+    mission.party.forEach(r=>{
+      const sx=r.x-mission.cam;
+      if(sx>-40)drawHeroSprite(r,sx,t,walking&&!r.h.ko);
+    });
+    ctx.restore();
+  }
+  ctx.restore();
   ctx.font='11px monospace';
   for(const f of mission.flo){
     ctx.globalAlpha=clamp(f.t,0,1);
     ctx.fillStyle=f.c;
-    ctx.fillText(f.txt,f.x-mission.cam-10,f.y);
+    const fx=f.x-mission.cam-10;
+    ctx.fillText(f.txt,mir?STAGE_W-fx:fx,f.y);
     ctx.globalAlpha=1;
   }
   ctx.drawImage(vig,0,0);
@@ -910,7 +956,7 @@ function btn(label,onclick,opts){
   return '<button class="'+cls+'"'+style+title+' onclick="'+onclick+'"'+dis+'>'+label+'</button>';
 }
 function updateRes(){
-  byId('res').innerHTML='Gold <b>'+state.gold+'</b> &nbsp;·&nbsp; Potions <b>'+state.potions+'</b> &nbsp;·&nbsp; Heroes <b>'+state.heroes.length+'/6</b>';
+  byId('res').innerHTML='Gold <b>'+state.gold+'</b> &nbsp;·&nbsp; Potions <b>'+state.potions+'</b> &nbsp;·&nbsp; Heroes <b>'+state.heroes.length+'/'+MAX_HEROES+'</b>';
   byId('btnMute').textContent=state.muted?'Sound: Off':'Sound: On';
   if(gameMode==='mission'){
     byId('btnPotion').textContent='Potion ×'+state.potions;
@@ -919,6 +965,8 @@ function updateRes(){
     byId('btnSuper').disabled=state.superPotions<=0;
     byId('btnPower').textContent='Power ×'+state.powerPotions;
     byId('btnPower').disabled=state.powerPotions<=0;
+    byId('btnRes').textContent='Res ×'+state.resPotions;
+    byId('btnRes').disabled=state.resPotions<=0||!mission||!mission.party.some(r=>r.h.ko);
     byId('btnSpeed').textContent=state.speed+'×';
     byId('btnPause').textContent=state.paused?'Resume':'Pause';
   }
@@ -960,7 +1008,7 @@ function heroCard(h,ctx2){
     s+='<div class="muted" style="margin-top:5px">'+c.desc+'</div>';
     const cost=effectiveRecruitCost(h), discounted=state.recruiterFavors>0;
     s+='<div class="row">'+btn('Hire — '+cost+'g'+(discounted?' (Favor)':''),'Actions.recruit(\''+h.id+'\')',
-      {disabled:state.gold<cost||state.heroes.length>=6})+'</div>';
+      {disabled:state.gold<cost||state.heroes.length>=MAX_HEROES})+'</div>';
   }else{
     // equipment
     s+='<div style="margin-top:6px">';
@@ -998,7 +1046,7 @@ function uiParty(){
   return cardsGrid(state.heroes.map(h=>heroCard(h)));
 }
 function uiRecruit(){
-  return '<p class="muted" style="margin-bottom:8px">Sellswords at the bar. New faces arrive after each expedition. Roster max 6.</p>'
+  return '<p class="muted" style="margin-bottom:8px">Sellswords at the bar. New faces arrive after each expedition. Roster max '+MAX_HEROES+'.</p>'
     +cardsGrid(state.recruits.map(h=>heroCard(h,'recruit')));
 }
 function uiShop(){
@@ -1011,7 +1059,10 @@ function uiShop(){
     +'<span class="muted">You carry '+state.superPotions+'</span></div>'
     +'<div class="row"><span>Power Potion <span class="muted">(+35% party ATK for 20s, mid-run)</span></span>'
     +btn('Buy — 70g','Actions.buyPowerPotion()',{disabled:state.gold<70})
-    +'<span class="muted">You carry '+state.powerPotions+'</span></div></div>';
+    +'<span class="muted">You carry '+state.powerPotions+'</span></div>'
+    +'<div class="row"><span>Resurrection Potion <span class="muted">(revives a fallen hero mid-run at 50% HP)</span></span>'
+    +btn('Buy — 250g','Actions.buyResPotion()',{disabled:state.gold<250})
+    +'<span class="muted">You carry '+state.resPotions+'</span></div></div>';
   s+='<div class="card" style="margin-bottom:10px"><h3>Tavern Fare</h3>'
     +'<div class="row"><span>Round of Ale <span class="muted">('+pick(ALE_QUOTES)+')</span></span>'
     +btn('Buy — 15g','Actions.buyAle()',{disabled:state.gold<15})
@@ -1066,6 +1117,13 @@ function uiMap(){
       +(ready?'':'<span class="locknote">need a standing hero</span>')+'</div>';
   }
   cards.push(nm+'</div>');
+  if(mirrorUnlocked()){
+    cards.push('<div class="card"><h3>'+MIRROR.name+' <span class="hurt">· Danger '+MIRROR.danger+'</span></h3>'
+      +'<div class="muted">Foes: '+MIRROR.enemies.map(e=>e.name).join(', ')+' · Boss: '+MIRROR.boss.name+'</div>'
+      +'<div class="hurt">Nothing here is where it should be.</div>'
+      +'<div class="row">'+btn('Embark','Actions.embarkMirror()',{disabled:!ready,warn:true})
+      +(ready?'':'<span class="locknote">need a standing hero</span>')+'</div></div>');
+  }
   return '<p class="muted" style="margin-bottom:8px">Choose an expedition. The party marches on its own — you may use potions or sound the retreat.</p>'
     +cardsGrid(cards)
     +'<div id="resetrow">'+btn('Abandon save & start anew','Actions.reset()',{warn:true})+'</div>';
@@ -1110,7 +1168,7 @@ const Actions={
   recruit(id){
     const h=state.recruits.find(x=>x.id===id); if(!h)return;
     const cost=effectiveRecruitCost(h);
-    if(state.gold<cost||state.heroes.length>=6)return;
+    if(state.gold<cost||state.heroes.length>=MAX_HEROES)return;
     state.gold-=cost;
     if(state.recruiterFavors>0)state.recruiterFavors--;
     state.heroes.push(h);
@@ -1120,6 +1178,7 @@ const Actions={
   buyPotion(){ if(state.gold<25)return; state.gold-=25;state.potions++;save();updateRes();renderTab(); },
   buySuperPotion(){ if(state.gold<60)return; state.gold-=60;state.superPotions++;save();updateRes();renderTab(); },
   buyPowerPotion(){ if(state.gold<70)return; state.gold-=70;state.powerPotions++;save();updateRes();renderTab(); },
+  buyResPotion(){ if(state.gold<250)return; state.gold-=250;state.resPotions++;save();updateRes();renderTab(); },
   buyAle(){ if(state.gold<15)return; state.gold-=15;state.alesBought++;sfx.cheer();save();updateRes();renderTab(); },
   buyRecruiterFavor(){ if(state.gold<90)return; state.gold-=90;state.recruiterFavors++;save();updateRes();renderTab(); },
   buyGear(i){
@@ -1154,6 +1213,7 @@ const Actions={
   setStashSort(mode){ state.stashSort=mode; save(); renderTab(); },
   embark(bi){ if(bi<state.unlocked)startMission(bi); },
   embarkNightmare(){ if(state.unlocked>=BIOMES.length)startMission('nightmare'); },
+  embarkMirror(){ if(mirrorUnlocked())startMission('mirror'); },
   potion(){
     if(!mission||mission.over||state.potions<=0)return;
     if(useHealPotion(40))state.potions--;
@@ -1170,6 +1230,18 @@ const Actions={
     mission.buff={mult:1.35,t:0,dur:20};
     flo('POWER UP!',mission.px,GROUND_Y-70,'#ffd23f');
     sfx.power();
+    updateRes();
+  },
+  resPotion(){
+    if(!mission||mission.over||state.resPotions<=0)return;
+    const fallen=mission.party.find(r=>r.h.ko);
+    if(!fallen)return;
+    state.resPotions--;
+    fallen.h.ko=false;
+    fallen.hp=Math.round(fallen.st.hp*0.5);
+    fallen.healFx=0.5;
+    flo('REVIVED!',fallen.x,GROUND_Y-70,'#ffd23f');
+    sfx.resurrect();
     updateRes();
   },
   retreat(){ if(mission&&!mission.over)finishMission('retreat'); },
@@ -1217,6 +1289,8 @@ function loop(now){
   if(state.powerPotions==null)state.powerPotions=0;
   if(state.recruiterFavors==null)state.recruiterFavors=0;
   if(state.alesBought==null)state.alesBought=0;
+  if(state.resPotions==null)state.resPotions=0;
+  if(state.nightmareBestDistance==null)state.nightmareBestDistance=0;
   state.paused=false;
   gameMode='hub'; mission=null;
   updateUIVis();
