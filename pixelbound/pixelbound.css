@@ -44,6 +44,9 @@
   .chip{display:inline-block;width:9px;height:9px;margin-right:5px}
   .muted{color:var(--dim)} .gold{color:var(--amber)} .hurt{color:var(--blood)}
   .r0{color:#b3a894}.r1{color:var(--blue)}.r2{color:var(--purple)}
+  .tier-vet{color:var(--blue)}
+  .tier-elite{color:var(--amber);text-shadow:0 0 4px rgba(216,162,74,0.6)}
+  .tier-legend{color:var(--purple);text-shadow:0 0 6px rgba(176,106,216,0.8)}
   .statline{display:flex;flex-wrap:wrap;gap:8px;margin:5px 0;color:var(--dim)}
   .statline b{color:var(--parch)}
   .bar{height:7px;background:#0a080a;border:1px solid var(--line);margin:5px 0}

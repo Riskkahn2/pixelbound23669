@@ -133,11 +133,24 @@ const TNAMES=['Ring','Amulet','Charm','Talisman','Idol'];
 /* ================= STATE ================= */
 let state=null, mission=null, gameMode='hub', currentTab='party';
 
-function newHero(cls){
-  return {id:uid(),name:pick(NAMES),cls,lvl:1,xp:0,pts:0,
+function newHero(cls,lvl){
+  lvl=lvl||1;
+  return {id:uid(),name:pick(NAMES),cls,lvl,xp:0,pts:(lvl-1)*3,
     bonus:{hp:0,atk:0,def:0,spd:0},
     equip:{weapon:null,armor:null,trinket:null},ko:false};
 }
+const HERO_TIERS=[
+  {min:30,title:'Legendary',cls:'tier-legend',hex:'#b06ad8'},
+  {min:20,title:'Elite',cls:'tier-elite',hex:'#d8a24a'},
+  {min:10,title:'Veteran',cls:'tier-vet',hex:'#5a8fd8'},
+  {min:0,title:null,cls:'',hex:null},
+];
+function heroTier(lvl){return HERO_TIERS.find(t=>lvl>=t.min)}
+function partyAvgLevel(){
+  if(!state.heroes.length)return 1;
+  return Math.round(state.heroes.reduce((a,h)=>a+h.lvl,0)/state.heroes.length);
+}
+function reviveCost(h){return 60+h.lvl*25}
 function stats(h){
   const c=CLASSES[h.cls];
   let hp=c.hp+h.bonus.hp+(h.lvl-1)*4,
@@ -177,9 +190,13 @@ function makeItem(tier,slot){
   return {id:uid(),slot,name:pick(R.pre)+base,rar,stats:st,
     value:Math.max(4,Math.round((tier*6+sum)*(0.6+0.4*R.mult)))};
 }
-function recruitCost(){return 40+(state.unlocked-1)*35+state.heroes.length*12}
+function recruitCost(h){
+  const lvl=h?h.lvl:partyAvgLevel();
+  return 40+(state.unlocked-1)*35+state.heroes.length*12+(lvl-1)*20;
+}
 function refreshOffers(){
-  state.recruits=[0,1,2].map(()=>newHero(pick(Object.keys(CLASSES))));
+  const baseLvl=partyAvgLevel();
+  state.recruits=[0,1,2].map(()=>newHero(pick(Object.keys(CLASSES)),Math.max(1,baseLvl+ri(-2,2))));
   state.shop=[0,1,2].map(()=>makeItem(state.unlocked));
 }
 function newGame(){
@@ -643,9 +660,9 @@ function drawBG(B,cam,t){
 function drawPartyHUD(){
   ctx.font='10px monospace';
   mission.party.forEach((r,i)=>{
-    const y=10+i*24, c=CLASSES[r.h.cls];
+    const y=10+i*24, c=CLASSES[r.h.cls], tier=heroTier(r.h.lvl);
     drawRect(8,y,9,9,c.color);
-    ctx.fillStyle=r.h.ko?'#8c2f2f':'#cfc2ab';
+    ctx.fillStyle=r.h.ko?'#8c2f2f':(tier.hex||'#cfc2ab');
     ctx.fillText(r.h.name+' L'+r.h.lvl+(r.h.ko?' DOWN':''),22,y+8);
     drawRect(8,y+12,120,5,'#0a080a');
     const pct=r.hp/r.st.hp;
@@ -750,7 +767,7 @@ function drawHub(t){
       hat:c.hat,weapon:c.weapon,armor:h.cls==='fighter',
       phase:null,atkT:0,ko:h.ko});
     ctx.font='9px monospace';
-    ctx.fillStyle=h.ko?'#8c2f2f':'#8a7d6b';
+    ctx.fillStyle=h.ko?'#8c2f2f':(heroTier(h.lvl).hex||'#8a7d6b');
     ctx.fillText(h.name,hx0+i*62-14,GROUND_Y+14+(h.ko?0:bob));
   });
   if(!state.heroes.length){
@@ -771,6 +788,14 @@ function itemStats(it){
   return p.join(', ');
 }
 function itemLabel(it){return '<span class="'+RARITY[it.rar].cls+'">'+esc(it.name)+'</span> <span class="muted">['+it.slot+']</span>'}
+const STASH_SORTS=[['newest','Newest'],['oldest','Oldest'],['rarity','Rarity'],['value','Value']];
+function sortStash(arr,mode){
+  const a=arr.slice();
+  if(mode==='newest')return a.reverse();
+  if(mode==='rarity')return a.sort((x,y)=>y.rar-x.rar);
+  if(mode==='value')return a.sort((x,y)=>y.value-x.value);
+  return a; // 'oldest' — items accumulate via push, so array order is already oldest-first
+}
 function itemCardHeader(it){return '<h3>'+itemLabel(it)+'</h3><div class="muted">'+itemStats(it)+'</div>'}
 function cardsGrid(cardsHtml){return '<div class="cards">'+cardsHtml.join('')+'</div>'}
 function btn(label,onclick,opts){
@@ -778,7 +803,8 @@ function btn(label,onclick,opts){
   const cls='act'+(opts.warn?' warn':'');
   const style=opts.style?' style="'+opts.style+'"':'';
   const dis=opts.disabled?' disabled':'';
-  return '<button class="'+cls+'"'+style+' onclick="'+onclick+'"'+dis+'>'+label+'</button>';
+  const title=opts.title?' title="'+opts.title+'"':'';
+  return '<button class="'+cls+'"'+style+title+' onclick="'+onclick+'"'+dis+'>'+label+'</button>';
 }
 function updateRes(){
   byId('res').innerHTML='Gold <b>'+state.gold+'</b> &nbsp;·&nbsp; Potions <b>'+state.potions+'</b> &nbsp;·&nbsp; Heroes <b>'+state.heroes.length+'/6</b>';
@@ -805,10 +831,18 @@ function renderTab(){
   else if(currentTab==='stash')el.innerHTML=uiStash();
   else el.innerHTML=uiMap();
 }
+function equipItemAt(h,i){
+  const it=state.stash[i];
+  const old=h.equip[it.slot];
+  h.equip[it.slot]=it; state.stash.splice(i,1);
+  if(old)state.stash.push(old);
+}
 function heroCard(h,ctx2){
-  const st=stats(h), c=CLASSES[h.cls];
+  const st=stats(h), c=CLASSES[h.cls], tier=heroTier(h.lvl);
   let s='<div class="card"><h3><span class="chip" style="background:'+c.color+'"></span>'
-    +esc(h.name)+' <span class="muted">· '+c.label+' · Lv '+h.lvl+'</span>'
+    +(tier.title?'<span class="'+tier.cls+'">'+tier.title+'</span> ':'')
+    +'<span class="'+tier.cls+'">'+esc(h.name)+'</span>'
+    +' <span class="muted">· '+c.label+' · Lv '+h.lvl+'</span>'
     +(h.ko?' <span class="hurt">DOWN</span>':'')+'</h3>';
   s+='<div class="statline"><span>HP <b>'+st.hp+'</b></span><span>ATK <b>'+st.atk+'</b></span>'
     +'<span>DEF <b>'+st.def+'</b></span><span>SPD <b>'+st.spd.toFixed(2)+'/s</b></span>'
@@ -817,27 +851,34 @@ function heroCard(h,ctx2){
     +'<div class="muted">XP '+h.xp+' / '+xpNeed(h.lvl)+'</div>';
   if(ctx2==='recruit'){
     s+='<div class="muted" style="margin-top:5px">'+c.desc+'</div>';
-    s+='<div class="row">'+btn('Hire — '+recruitCost()+'g','Actions.recruit(\''+h.id+'\')',
-      {disabled:state.gold<recruitCost()||state.heroes.length>=6})+'</div>';
+    s+='<div class="row">'+btn('Hire — '+recruitCost(h)+'g','Actions.recruit(\''+h.id+'\')',
+      {disabled:state.gold<recruitCost(h)||state.heroes.length>=6})+'</div>';
   }else{
     // equipment
     s+='<div style="margin-top:6px">';
     for(const slot of ['weapon','armor','trinket']){
       const it=h.equip[slot];
-      s+='<div class="muted">'+slot+': '+(it?itemLabel(it)+' <span class="muted">'+itemStats(it)+'</span> '
-        +btn('×','Actions.unequip(\''+h.id+'\',\''+slot+'\')',{style:'padding:1px 5px'}):'—')+'</div>';
+      s+='<div class="row" style="margin-top:3px"><span class="muted">'+slot+': '+(it?itemLabel(it)+' <span class="muted">'+itemStats(it)+'</span> '
+        +btn('×','Actions.unequip(\''+h.id+'\',\''+slot+'\')',{style:'padding:1px 5px'}):'—')+'</span>';
+      const options=state.stash.filter(x=>x.slot===slot);
+      if(options.length){
+        s+='<select id="eq_'+h.id+'_'+slot+'">'
+          +options.map(x=>'<option value="'+x.id+'">'+esc(x.name)+' ('+RARITY[x.rar].label+')</option>').join('')
+          +'</select>'+btn('Equip','Actions.equipSlot(\''+h.id+'\',\''+slot+'\')',{style:'padding:1px 5px'});
+      }
+      s+='</div>';
     }
     s+='</div>';
     if(h.pts>0){
       s+='<div class="row"><span class="gold">'+h.pts+' pts:</span>'
-        +btn('+7 HP','Actions.spend(\''+h.id+'\',\'hp\')')
-        +btn('+1 ATK','Actions.spend(\''+h.id+'\',\'atk\')')
-        +btn('+1 DEF','Actions.spend(\''+h.id+'\',\'def\')')
-        +btn('+6% SPD','Actions.spend(\''+h.id+'\',\'spd\')')+'</div>';
+        +btn('+7 HP','Actions.spend(\''+h.id+'\',\'hp\',event)',{title:'Click +1 · Shift +5 · Ctrl all'})
+        +btn('+1 ATK','Actions.spend(\''+h.id+'\',\'atk\',event)',{title:'Click +1 · Shift +5 · Ctrl all'})
+        +btn('+1 DEF','Actions.spend(\''+h.id+'\',\'def\',event)',{title:'Click +1 · Shift +5 · Ctrl all'})
+        +btn('+6% SPD','Actions.spend(\''+h.id+'\',\'spd\',event)',{title:'Click +1 · Shift +5 · Ctrl all'})+'</div>';
     }
     s+='<div class="row">';
     if(h.ko){
-      const cost=20+h.lvl*15;
+      const cost=reviveCost(h);
       s+=btn('Revive — '+cost+'g','Actions.revive(\''+h.id+'\')',{disabled:state.gold<cost});
     }
     s+=btn('Dismiss','Actions.dismiss(\''+h.id+'\')',{warn:true})+'</div>';
@@ -868,8 +909,10 @@ function uiShop(){
 function uiStash(){
   if(!state.stash.length)return '<p class="locknote">The stash is empty. Loot awaits in the dark.</p>';
   const opts=state.heroes.map(h=>'<option value="'+h.id+'">'+esc(h.name)+' ('+CLASSES[h.cls].label+')</option>').join('');
-  return '<p class="muted" style="margin-bottom:8px">Gear found on expeditions. Equip it here, or sell it.</p>'
-    +cardsGrid(state.stash.map(it=>'<div class="card">'+itemCardHeader(it)
+  const sortOpts=STASH_SORTS.map(([v,l])=>'<option value="'+v+'"'+(state.stashSort===v?' selected':'')+'>'+l+'</option>').join('');
+  return '<div class="row" style="margin-bottom:8px"><span class="muted">Gear found on expeditions. Equip it here, or sell it.</span>'
+    +'<span class="muted" style="margin-left:auto">Sort: <select onchange="Actions.setStashSort(this.value)">'+sortOpts+'</select></span></div>'
+    +cardsGrid(sortStash(state.stash,state.stashSort).map(it=>'<div class="card">'+itemCardHeader(it)
       +'<div class="row">'
       +(state.heroes.length?'<select id="sel_'+it.id+'">'+opts+'</select>'+btn('Equip','Actions.equip(\''+it.id+'\')'):'')
       +btn('Sell — '+it.value+'g','Actions.sell(\''+it.id+'\')',{warn:true})
@@ -925,14 +968,15 @@ function showSummary(){
 /* ================= ACTIONS ================= */
 const Actions={
   tab(t){currentTab=t;renderTab()},
-  spend(id,stat){
+  spend(id,stat,e){
     const h=state.heroes.find(x=>x.id===id); if(!h||h.pts<=0)return;
-    h.pts--; h.bonus[stat]+={hp:7,atk:1,def:1,spd:6}[stat];
+    const amt=e&&e.ctrlKey?h.pts:e&&e.shiftKey?Math.min(5,h.pts):1;
+    h.pts-=amt; h.bonus[stat]+=amt*{hp:7,atk:1,def:1,spd:6}[stat];
     save();renderTab();
   },
   revive(id){
     const h=state.heroes.find(x=>x.id===id); if(!h)return;
-    const cost=20+h.lvl*15; if(state.gold<cost)return;
+    const cost=reviveCost(h); if(state.gold<cost)return;
     state.gold-=cost; h.ko=false; save();updateRes();renderTab();
   },
   dismiss(id){
@@ -944,8 +988,8 @@ const Actions={
   },
   recruit(id){
     const h=state.recruits.find(x=>x.id===id); if(!h)return;
-    if(state.gold<recruitCost()||state.heroes.length>=6)return;
-    state.gold-=recruitCost();
+    if(state.gold<recruitCost(h)||state.heroes.length>=6)return;
+    state.gold-=recruitCost(h);
     state.heroes.push(h);
     state.recruits=state.recruits.filter(x=>x.id!==id);
     save();updateRes();renderTab();
@@ -965,10 +1009,14 @@ const Actions={
     const i=state.stash.findIndex(x=>x.id===itemId); if(i<0)return;
     const sel=byId('sel_'+itemId); if(!sel)return;
     const h=state.heroes.find(x=>x.id===sel.value); if(!h)return;
-    const it=state.stash[i];
-    const old=h.equip[it.slot];
-    h.equip[it.slot]=it; state.stash.splice(i,1);
-    if(old)state.stash.push(old);
+    equipItemAt(h,i);
+    save();renderTab();
+  },
+  equipSlot(heroId,slot){
+    const h=state.heroes.find(x=>x.id===heroId); if(!h)return;
+    const sel=byId('eq_'+heroId+'_'+slot); if(!sel||!sel.value)return;
+    const i=state.stash.findIndex(x=>x.id===sel.value); if(i<0)return;
+    equipItemAt(h,i);
     save();renderTab();
   },
   unequip(heroId,slot){
@@ -976,6 +1024,7 @@ const Actions={
     state.stash.push(h.equip[slot]); h.equip[slot]=null;
     save();renderTab();
   },
+  setStashSort(mode){ state.stashSort=mode; save(); renderTab(); },
   embark(bi){ if(bi<state.unlocked)startMission(bi); },
   embarkNightmare(){ if(state.unlocked>=BIOMES.length)startMission('nightmare'); },
   potion(){
@@ -1028,6 +1077,7 @@ function loop(now){
   if(!state.recruits||!state.recruits.length)refreshOffers();
   if(state.speed==null)state.speed=1;
   if(state.muted==null)state.muted=false;
+  if(!state.stashSort)state.stashSort='newest';
   state.paused=false;
   gameMode='hub'; mission=null;
   updateUIVis();
