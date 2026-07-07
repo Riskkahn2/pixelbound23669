@@ -177,6 +177,8 @@ const MIRROR_TIER=5;
 function mirrorUnlocked(){
   return state.completions.every(c=>c>=5)&&(state.nightmareBestDistance||0)>=50000;
 }
+const PROTEST_MONSTERS=[BIOMES[0].enemies[0],BIOMES[1].enemies[0],BIOMES[2].enemies[0],
+  BIOMES[3].enemies[1],NIGHTMARE.enemies[0]];
 const RARITY=[
  {pre:['Worn ','Plain ',''],mult:1,label:'Common',cls:'r0',col:'#b3a894'},
  {pre:['Fine ','Tempered ','Keen '],mult:1.6,label:'Rare',cls:'r1',col:'#5a8fd8'},
@@ -898,29 +900,21 @@ function drawMission(t){
 }
 function drawProtest(t){
   const total=state.completions.reduce((a,c)=>a+c,0);
-  const count=Math.min(8,Math.floor(total/2));
-  const wx=600,wy=108,ww=120,wh=82;
-  drawRect(wx-7,wy-7,ww+14,wh+14,'#241a10');
-  const wg=ctx.createLinearGradient(0,wy,0,wy+wh);
-  wg.addColorStop(0,'#1a2438');wg.addColorStop(1,'#2c1830');
-  ctx.fillStyle=wg;ctx.fillRect(wx,wy,ww,wh);
-  if(count<=0){
-    ctx.font='8px monospace';ctx.fillStyle='#4a4658';
-    ctx.fillText('quiet out there',wx+14,wy+wh/2+3);
-  }else{
-    for(let i=0;i<count;i++){
-      const col=i%4,row=Math.floor(i/4);
-      const mx=wx+18+col*24,my=wy+wh-14-row*32+Math.sin(t*3+i)*1.4;
-      drawRect(mx-3,my-8,6,8,'#141018');
-      drawRect(mx-2,my-11,4,4,'#241830');
-      drawRect(mx+3,my-17,2,9,'#0a0810');
-      drawRect(mx+1,my-21,9,6,'#8c2f2f');
-    }
-    ctx.font='6px monospace';ctx.fillStyle='#e8d8b0';
-    ctx.fillText(PROTEST_SIGNS[Math.floor(t/4)%PROTEST_SIGNS.length],wx+5,wy+12);
+  const count=Math.min(PROTEST_MONSTERS.length,Math.ceil(total/3));
+  if(count<=0)return;
+  for(let i=0;i<count;i++){
+    const tp=PROTEST_MONSTERS[i];
+    const px=594+i*29;
+    const o={phase:t*4+i,atkT:0};
+    if(tp.kind==='beast')drawBeast(px,GROUND_Y,-1,tp.c,o);
+    else if(tp.kind==='big')drawBig(px,GROUND_Y,-1,tp.c,tp.size||1,o);
+    else drawHumanoid(px,GROUND_Y,-1,tp.c,{...o,hat:tp.hat,weapon:tp.weapon});
+    const signBob=Math.sin(t*2.4+i)*1.5;
+    drawRect(px-3,GROUND_Y-40-signBob,2,10,'#0a0810');
+    drawRect(px-9,GROUND_Y-46-signBob,10,7,'#8c2f2f');
   }
-  drawRect(wx,wy+wh/2-1,ww,2,'#241a10');
-  drawRect(wx+ww/2-1,wy,2,wh,'#241a10');
+  ctx.font='7px monospace';ctx.fillStyle='#e8d8b0';
+  ctx.fillText(PROTEST_SIGNS[Math.floor(t/4)%PROTEST_SIGNS.length],598,GROUND_Y-58);
 }
 /* ---- hub ---- */
 function drawHub(t){
@@ -943,8 +937,6 @@ function drawHub(t){
   drawRect(148,156,28,28,'#7a2f2f');
   drawRect(158,148,8,44,'#3e3e46');
   drawRect(140,166,44,8,'#3e3e46');
-  // monster protest window
-  drawProtest(t);
   // floor
   drawRect(0,GROUND_Y,STAGE_W,STAGE_H-GROUND_Y,'#1a1410');
   drawRect(0,GROUND_Y,STAGE_W,4,'#2c2115');
@@ -992,22 +984,26 @@ function drawHub(t){
   drawRect(697,GROUND_Y+34+catBob,4,5,'#6e5240');
   drawRect(709,GROUND_Y+34+catBob,4,5,'#6e5240');
   drawRect(724,GROUND_Y+37+catBob,7,3,'#5a4030');
-  // heroes idle
-  const hx0=360;
+  // heroes idle — spacing compresses to fit a full roster without crowding the protest
+  const hx0=360, hxMax=580;
+  const hSpace=state.heroes.length>1?Math.min(62,(hxMax-hx0)/(state.heroes.length-1)):0;
   state.heroes.forEach((h,i)=>{
     const c=CLASSES[h.cls];
     const bob=Math.sin(t*2+i)*1.5;
-    drawHumanoid(hx0+i*62,GROUND_Y+bob*0,1,c.pal,{
+    const hx=hx0+i*hSpace;
+    drawHumanoid(hx,GROUND_Y+bob*0,1,c.pal,{
       hat:c.hat,weapon:c.weapon,armor:h.cls==='fighter',
       phase:null,atkT:0,ko:h.ko});
     ctx.font='9px monospace';
     ctx.fillStyle=h.ko?'#8c2f2f':(heroTier(h.lvl).hex||'#8a7d6b');
-    ctx.fillText(h.name,hx0+i*62-14,GROUND_Y+14+(h.ko?0:bob));
+    ctx.fillText(h.name,hx-14,GROUND_Y+14+(h.ko?0:bob));
   });
   if(!state.heroes.length){
     ctx.font='11px monospace';ctx.fillStyle='#8a7d6b';
     ctx.fillText('The tavern stands empty. Recruit a soul brave enough.',330,GROUND_Y-30);
   }
+  // the monster protest — real recognizable foes, standing right there in the tavern
+  drawProtest(t);
   // dust motes
   for(let i=0;i<14;i++){
     const drift=t*6*(i%2?1:-1);
