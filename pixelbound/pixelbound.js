@@ -51,6 +51,8 @@ const sfx={
     setTimeout(()=>beep(90,0.8,'sawtooth',0.13,140),150);
     setTimeout(()=>beep(50,0.9,'sawtooth',0.14,10),300);
   },
+  cheer(){beepSeq([440,550,660,880],'triangle',0.12,0.08)},
+  power(){beepSeq([220,330,440],'square',0.15,0.1); setTimeout(()=>beep(660,0.15,'square',0.16),140)},
 };
 
 /* ================= DATA ================= */
@@ -71,6 +73,9 @@ const CLASSES={
 const NAMES=['Bram','Wilhelm','Isolde','Greta','Corvin','Maura','Aldric','Sable','Odo','Ren',
   'Petra','Lazlo','Vesna','Roderic','Ines','Talbot','Yara','Osric','Nell','Dagny',
   'Erlan','Sigrid','Fenwick','Ludo','Marda','Quill','Havel','Tamsin','Ulric','Zora'];
+const ALE_QUOTES=['Does nothing. Tastes great.','The bartender nods approvingly.',
+  'Someone starts singing badly.','A hero in the corner cheers for no reason.',
+  'The barkeep remembers your name now.','Nobody asked, but here it is anyway.'];
 
 const BIOMES=[
  {name:'Gloomwood Forest',danger:'I',
@@ -205,10 +210,15 @@ function refreshOffers(){
   state.shop=[0,1,2].map(()=>makeItem(state.unlocked));
 }
 function newGame(){
-  state={gold:150,potions:2,heroes:[newHero('fighter'),newHero('healer')],
+  state={gold:150,potions:2,superPotions:0,powerPotions:0,recruiterFavors:0,alesBought:0,
+    heroes:[newHero('fighter'),newHero('healer')],
     stash:[makeItem(1,'weapon')],unlocked:1,completions:[0,0,0,0],
     recruits:[],shop:[],speed:1,paused:false};
   refreshOffers();
+}
+function effectiveRecruitCost(h){
+  const base=recruitCost(h);
+  return state.recruiterFavors>0?Math.round(base*0.5):base;
 }
 async function save(){
   try{ if(window.storage) await window.storage.set('pixelbound_save',JSON.stringify(state)); }
@@ -288,7 +298,12 @@ function triggerTrance(shard){
   byId('stage').classList.add('trance');
 }
 function lootMult(){return mission.trance?2.5:1}
-function dmgMult(){return mission.trance?1.5:1}
+function enemyDmgMult(){return mission.trance?1.5:1}
+function heroDmgMult(){
+  let m=mission.trance?1.5:1;
+  if(mission.buff)m*=mission.buff.mult;
+  return m;
+}
 function startMission(bi){
   const eligible=state.heroes.filter(h=>!h.ko);
   if(!eligible.length)return;
@@ -300,7 +315,7 @@ function startMission(bi){
     return {h,st,hp:st.hp,cd:rnd(0.3,1.2),atkT:0,x:0,bob:Math.random()*6,healFx:0}});
   party.sort((a,b)=>CLASSES[a.h.cls].order-CLASSES[b.h.cls].order);
   mission={bi,B,diff,tier:endless?BIOMES.length-1:bi,len,groups:[],chests:[],shards:[],party,px:150,cam:0,state:'walk',
-    loot:{gold:0,items:[]},fx:[],flo:[],t:0,winT:0,over:null,endless,props:[],trance:null,
+    loot:{gold:0,items:[]},fx:[],flo:[],t:0,winT:0,over:null,endless,props:[],trance:null,buff:null,
     nextSpawnX:560,nextChestX:900,nextShardX:1800,nextPropX:200,propSeed:endless?B.seedId*777:bi*777};
   if(endless){
     extendNightmare();
@@ -345,7 +360,7 @@ function heroAct(r,act){
   else targets=[act[0]];
   r.atkT=0.18;
   for(const e of targets){
-    let d=r.st.atk*(cls==='mage'&&targets.length>1?0.75:1)*rnd(0.85,1.15)*dmgMult();
+    let d=r.st.atk*(cls==='mage'&&targets.length>1?0.75:1)*rnd(0.85,1.15)*heroDmgMult();
     const crit=Math.random()*100<r.st.crit;
     if(crit)d*=2;
     d=Math.max(1,Math.round(d-e.def*0.5));
@@ -355,6 +370,14 @@ function heroAct(r,act){
     if(cls==='mage')mission.fx.push({x1:r.x+8,y1:GROUND_Y-26,x2:e.x,y2:GROUND_Y-20,t:0.16,c:'#7fb2ff'});
     if(e.hp<=0)killEnemy(e,r);
   }
+}
+function useHealPotion(amount){
+  const tgt=aliveParty().sort((a,b)=>a.hp/a.st.hp-b.hp/b.st.hp)[0];
+  if(!tgt)return false;
+  tgt.hp=Math.min(tgt.st.hp,tgt.hp+amount);
+  tgt.healFx=0.5;
+  flo('+'+amount,tgt.x,GROUND_Y-52,'#7fd87f');
+  return true;
 }
 function awardGold(amount,x,y){
   amount=Math.round(amount*lootMult());
@@ -398,6 +421,10 @@ function updateMission(dt){
   mission.flo=mission.flo.filter(f=>f.t>0);
   mission.fx.forEach(f=>f.t-=dt); mission.fx=mission.fx.filter(f=>f.t>0);
   mission.party.forEach(r=>{r.atkT=Math.max(0,r.atkT-dt);r.healFx=Math.max(0,(r.healFx||0)-dt)});
+  if(mission.buff){
+    mission.buff.t+=dt;
+    if(mission.buff.t>=mission.buff.dur)mission.buff=null;
+  }
   if(mission.trance){
     mission.trance.t+=dt;
     for(const p of mission.trance.particles){
@@ -452,7 +479,7 @@ function updateMission(dt){
         e.cd-=dt;
         if(e.cd<=0){
           const tgt=(e.tp.kind==='hum'&&Math.random()<0.3)?pick(aliveParty()):aliveParty()[0];
-          if(tgt)hurtHero(tgt,e.atk*dmgMult());
+          if(tgt)hurtHero(tgt,e.atk*enemyDmgMult());
           e.cd=1/e.tp.spd; e.atkT=0.2;
           if(!aliveParty().length){finishMission('wipe');return}
         }
@@ -883,6 +910,10 @@ function updateRes(){
   if(gameMode==='mission'){
     byId('btnPotion').textContent='Potion ×'+state.potions;
     byId('btnPotion').disabled=state.potions<=0;
+    byId('btnSuper').textContent='Super ×'+state.superPotions;
+    byId('btnSuper').disabled=state.superPotions<=0;
+    byId('btnPower').textContent='Power ×'+state.powerPotions;
+    byId('btnPower').disabled=state.powerPotions<=0;
     byId('btnSpeed').textContent=state.speed+'×';
     byId('btnPause').textContent=state.paused?'Resume':'Pause';
   }
@@ -922,8 +953,9 @@ function heroCard(h,ctx2){
     +'<div class="muted">XP '+h.xp+' / '+xpNeed(h.lvl)+'</div>';
   if(ctx2==='recruit'){
     s+='<div class="muted" style="margin-top:5px">'+c.desc+'</div>';
-    s+='<div class="row">'+btn('Hire — '+recruitCost(h)+'g','Actions.recruit(\''+h.id+'\')',
-      {disabled:state.gold<recruitCost(h)||state.heroes.length>=6})+'</div>';
+    const cost=effectiveRecruitCost(h), discounted=state.recruiterFavors>0;
+    s+='<div class="row">'+btn('Hire — '+cost+'g'+(discounted?' (Favor)':''),'Actions.recruit(\''+h.id+'\')',
+      {disabled:state.gold<cost||state.heroes.length>=6})+'</div>';
   }else{
     // equipment
     s+='<div style="margin-top:6px">';
@@ -966,9 +998,22 @@ function uiRecruit(){
 }
 function uiShop(){
   let s='<div class="card" style="margin-bottom:10px"><h3>Provisions</h3>'
-    +'<div class="row"><span>Healing potion <span class="muted">(restores 40 HP mid-run)</span></span>'
+    +'<div class="row"><span>Healing Potion <span class="muted">(restores 40 HP mid-run)</span></span>'
     +btn('Buy — 25g','Actions.buyPotion()',{disabled:state.gold<25})
-    +'<span class="muted">You carry '+state.potions+'</span></div></div>';
+    +'<span class="muted">You carry '+state.potions+'</span></div>'
+    +'<div class="row"><span>Super Health Potion <span class="muted">(restores 120 HP mid-run)</span></span>'
+    +btn('Buy — 60g','Actions.buySuperPotion()',{disabled:state.gold<60})
+    +'<span class="muted">You carry '+state.superPotions+'</span></div>'
+    +'<div class="row"><span>Power Potion <span class="muted">(+35% party ATK for 20s, mid-run)</span></span>'
+    +btn('Buy — 70g','Actions.buyPowerPotion()',{disabled:state.gold<70})
+    +'<span class="muted">You carry '+state.powerPotions+'</span></div></div>';
+  s+='<div class="card" style="margin-bottom:10px"><h3>Tavern Fare</h3>'
+    +'<div class="row"><span>Round of Ale <span class="muted">('+pick(ALE_QUOTES)+')</span></span>'
+    +btn('Buy — 15g','Actions.buyAle()',{disabled:state.gold<15})
+    +'<span class="muted">'+state.alesBought+' bought</span></div>'
+    +'<div class="row"><span>Recruiter\'s Favor <span class="muted">(halves your next hire\'s cost)</span></span>'
+    +btn('Buy — 90g','Actions.buyRecruiterFavor()',{disabled:state.gold<90})
+    +'<span class="muted">You carry '+state.recruiterFavors+'</span></div></div>';
   s+='<p class="muted" style="margin:8px 0">Today\'s wares — restocked after each expedition. Sell loot from the Stash tab.</p>';
   s+=cardsGrid(state.shop.map((it,i)=>{
     const price=it.value*2;
@@ -1059,13 +1104,19 @@ const Actions={
   },
   recruit(id){
     const h=state.recruits.find(x=>x.id===id); if(!h)return;
-    if(state.gold<recruitCost(h)||state.heroes.length>=6)return;
-    state.gold-=recruitCost(h);
+    const cost=effectiveRecruitCost(h);
+    if(state.gold<cost||state.heroes.length>=6)return;
+    state.gold-=cost;
+    if(state.recruiterFavors>0)state.recruiterFavors--;
     state.heroes.push(h);
     state.recruits=state.recruits.filter(x=>x.id!==id);
     save();updateRes();renderTab();
   },
   buyPotion(){ if(state.gold<25)return; state.gold-=25;state.potions++;save();updateRes();renderTab(); },
+  buySuperPotion(){ if(state.gold<60)return; state.gold-=60;state.superPotions++;save();updateRes();renderTab(); },
+  buyPowerPotion(){ if(state.gold<70)return; state.gold-=70;state.powerPotions++;save();updateRes();renderTab(); },
+  buyAle(){ if(state.gold<15)return; state.gold-=15;state.alesBought++;sfx.cheer();save();updateRes();renderTab(); },
+  buyRecruiterFavor(){ if(state.gold<90)return; state.gold-=90;state.recruiterFavors++;save();updateRes();renderTab(); },
   buyGear(i){
     const it=state.shop[i]; if(!it||state.gold<it.value*2)return;
     state.gold-=it.value*2; state.stash.push(it); state.shop.splice(i,1);
@@ -1100,12 +1151,20 @@ const Actions={
   embarkNightmare(){ if(state.unlocked>=BIOMES.length)startMission('nightmare'); },
   potion(){
     if(!mission||mission.over||state.potions<=0)return;
-    const tgt=aliveParty().sort((a,b)=>a.hp/a.st.hp-b.hp/b.st.hp)[0];
-    if(!tgt)return;
-    state.potions--;
-    tgt.hp=Math.min(tgt.st.hp,tgt.hp+40);
-    tgt.healFx=0.5;
-    flo('+40',tgt.x,GROUND_Y-52,'#7fd87f');
+    if(useHealPotion(40))state.potions--;
+    updateRes();
+  },
+  superPotion(){
+    if(!mission||mission.over||state.superPotions<=0)return;
+    if(useHealPotion(120))state.superPotions--;
+    updateRes();
+  },
+  powerPotion(){
+    if(!mission||mission.over||state.powerPotions<=0)return;
+    state.powerPotions--;
+    mission.buff={mult:1.35,t:0,dur:20};
+    flo('POWER UP!',mission.px,GROUND_Y-70,'#ffd23f');
+    sfx.power();
     updateRes();
   },
   retreat(){ if(mission&&!mission.over)finishMission('retreat'); },
@@ -1149,6 +1208,10 @@ function loop(now){
   if(state.speed==null)state.speed=1;
   if(state.muted==null)state.muted=false;
   if(!state.stashSort)state.stashSort='newest';
+  if(state.superPotions==null)state.superPotions=0;
+  if(state.powerPotions==null)state.powerPotions=0;
+  if(state.recruiterFavors==null)state.recruiterFavors=0;
+  if(state.alesBought==null)state.alesBought=0;
   state.paused=false;
   gameMode='hub'; mission=null;
   updateUIVis();
