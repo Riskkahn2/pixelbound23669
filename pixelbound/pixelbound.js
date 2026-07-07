@@ -282,7 +282,7 @@ function tranceParticles(){
 }
 function triggerTrance(shard){
   shard.taken=true;
-  mission.trance={t:0,dur:7,particles:tranceParticles()};
+  mission.trance={t:0,dur:13,particles:tranceParticles()};
   flo('NIGHTMARE TRANCE',shard.x,GROUND_Y-90,'#ff2a4a');
   sfx.trance();
   byId('stage').classList.add('trance');

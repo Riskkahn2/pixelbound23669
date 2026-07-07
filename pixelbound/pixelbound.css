@@ -33,10 +33,10 @@
   #summary{position:absolute;inset:0;background:rgba(5,3,6,.82);display:flex;
     align-items:center;justify-content:center;line-height:normal}
   #sumbox{background:var(--panel);border:3px solid var(--line);padding:22px 28px;
-    max-width:420px;width:90%;text-align:center}
+    max-width:420px;width:90%;max-height:90%;overflow-y:auto;text-align:center}
   #sumbox h2{letter-spacing:4px;font-size:16px;margin-bottom:12px}
   #sumbox .win{color:var(--amber)} #sumbox .lose{color:var(--blood)} #sumbox .ret{color:var(--dim)}
-  #sumbox ul{list-style:none;margin:10px 0;font-size:12px;text-align:left}
+  #sumbox ul{list-style:none;margin:10px 0;font-size:12px;text-align:left;max-height:180px;overflow-y:auto}
   #sumbox li{padding:3px 0;border-bottom:1px dashed #2a2028}
   /* panel */
   #panel{border:3px solid var(--line);background:var(--panel);min-height:280px}
